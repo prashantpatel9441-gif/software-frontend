@@ -18,7 +18,9 @@ export const api = {
       method: 'GET',
       headers: getHeaders(),
     });
-    return response.json();
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || 'Failed to fetch data');
+    return result;
   },
 
   post: async (endpoint, data) => {
@@ -32,7 +34,9 @@ export const api = {
       headers,
       body: isFormData ? data : JSON.stringify(data),
     });
-    return response.json();
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || 'Failed to save data');
+    return result;
   },
 
   put: async (endpoint, data) => {
@@ -46,7 +50,9 @@ export const api = {
       headers,
       body: isFormData ? data : JSON.stringify(data),
     });
-    return response.json();
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || 'Failed to update data');
+    return result;
   },
 
   delete: async (endpoint) => {
@@ -54,6 +60,8 @@ export const api = {
       method: 'DELETE',
       headers: getHeaders(),
     });
-    return response.json();
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || 'Failed to delete data');
+    return result;
   },
 };

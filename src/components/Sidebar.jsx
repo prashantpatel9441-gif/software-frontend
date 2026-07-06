@@ -13,7 +13,8 @@ import {
   PlusCircle,
   ListTodo,
   Users2,
-  UserPlus
+  UserPlus,
+  X
 } from 'lucide-react';
 
 export const Sidebar = ({ onLogout, isMobileMenuOpen, setIsMobileMenuOpen }) => {
@@ -79,9 +80,9 @@ export const Sidebar = ({ onLogout, isMobileMenuOpen, setIsMobileMenuOpen }) => 
           {/* Close button on mobile */}
           <button 
             onClick={() => setIsMobileMenuOpen(false)}
-            className="lg:hidden p-1.5 -mr-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
+            className="lg:hidden p-1.5 -mr-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer flex-shrink-0"
           >
-            <ChevronDown className="w-5 h-5 rotate-90" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
@@ -176,12 +177,12 @@ export const Sidebar = ({ onLogout, isMobileMenuOpen, setIsMobileMenuOpen }) => 
       <div className="p-4 border-t border-slate-200 bg-white">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center font-bold text-emerald-600">
+            <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center font-bold text-emerald-600 flex-shrink-0">
               <User className="w-5 h-5" />
             </div>
-            <div>
-              <p className="text-sm font-semibold text-slate-800 leading-tight">{user.name}</p>
-              <p className="text-[10px] text-slate-400 font-medium mt-0.5">{user.email}</p>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-slate-800 leading-tight truncate">{user.name}</p>
+              <p className="text-[10px] text-slate-400 font-medium mt-0.5 truncate">{user.email}</p>
             </div>
           </div>
           <button onClick={onLogout} title="Logout"
