@@ -391,7 +391,7 @@ export const Dashboard = ({ onManageOrders, onViewCustomers }) => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Trend Graph Visualiser */}
         <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-50 pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-50 pb-3 gap-3">
             <h3 className="font-bold text-slate-900 text-lg">Performance Analytics</h3>
             <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl">
               {['sales', 'revenue', 'customers', 'refunds'].map((tab) => (
@@ -482,7 +482,7 @@ export const Dashboard = ({ onManageOrders, onViewCustomers }) => {
 
       {/* Recent Orders Log Table */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-slate-50 flex justify-between items-center">
+        <div className="p-6 border-b border-slate-50 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
           <div>
             <h3 className="font-bold text-slate-900 text-lg">Recent Orders</h3>
             <p className="text-xs text-slate-400 mt-0.5">List of last orders created</p>
@@ -496,7 +496,7 @@ export const Dashboard = ({ onManageOrders, onViewCustomers }) => {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
+          <table className="w-full text-left text-sm min-w-[700px]">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 font-semibold">
                 <th className="py-3 px-6">Order ID</th>

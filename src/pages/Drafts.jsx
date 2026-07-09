@@ -274,7 +274,7 @@ export const Drafts = ({ onEditDraft, onBack }) => {
 
               {selectedDraft.items && selectedDraft.items.length > 0 && (
                 <div className="rounded-2xl border border-slate-100 overflow-hidden">
-                  <table className="w-full text-xs">
+                  <table className="w-full text-xs min-w-[500px]">
                     <thead className="bg-slate-50">
                       <tr>
                         <th className="py-2.5 px-4 text-left text-[10px] font-bold text-slate-400 uppercase">Product</th>

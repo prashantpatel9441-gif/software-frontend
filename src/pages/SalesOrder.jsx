@@ -617,7 +617,7 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
 
               {/* Items Table */}
               <div className="rounded-2xl border border-slate-100 overflow-hidden">
-                <table className="w-full text-xs">
+                <table className="w-full text-xs min-w-[500px]">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-100">
                       <th className="py-3 px-4 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Description</th>

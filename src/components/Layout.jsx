@@ -8,7 +8,7 @@ export const Layout = ({ children, onLogout }) => {
 
   return (
     <CRMProvider>
-      <div className="min-h-screen bg-slate-50 relative">
+      <div className="min-h-screen bg-slate-50 relative overflow-x-hidden">
         <Sidebar 
           onLogout={onLogout} 
           isMobileMenuOpen={isMobileMenuOpen}

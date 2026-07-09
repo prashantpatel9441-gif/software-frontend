@@ -270,7 +270,7 @@ const ProductHistoryTab = ({ customerId, allInvoices, customer }) => {
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <table className="w-full text-xs">
+          <table className="w-full text-xs min-w-[500px]">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100">
                 {['Product', 'Last Price', 'Avg Price', 'High', 'Low', 'Total Qty', 'Orders', 'Last Purchase'].map(h => (
@@ -303,7 +303,7 @@ const ProductHistoryTab = ({ customerId, allInvoices, customer }) => {
                     <tr>
                       <td colSpan={8} className="bg-slate-50/50 px-5 pb-4 pt-2">
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Complete Purchase History for {p.productName}</p>
-                        <table className="w-full text-[11px]">
+                        <table className="w-full text-[11px] min-w-[400px]">
                           <thead>
                             <tr className="text-slate-400 font-bold">
                               <th className="text-left pb-2">Invoice #</th>
@@ -411,7 +411,7 @@ const PaymentHistoryTab = ({ stats }) => {
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-xs">
+          <table className="w-full text-xs min-w-[500px]">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100">
                 {['Date', 'Invoice #', 'Payment Mode', 'Amount Received', 'Remaining Balance'].map(h => (
