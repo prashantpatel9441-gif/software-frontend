@@ -174,7 +174,7 @@ export const Dashboard = ({ onManageOrders, onViewCustomers }) => {
       const thirdMax = sorted[2] || secondMax;
       
       return (
-        <div className="h-64 w-full bg-white rounded-2xl flex items-end justify-between px-6 py-6 border border-slate-50">
+        <div className="h-64 w-full bg-white rounded-2xl flex items-end justify-between px-2 sm:px-6 py-6 border border-slate-50 overflow-x-auto">
           {data.map((val, i) => {
             const isHighest = val === max;
             const isSecond = val === secondMax && !isHighest;
@@ -182,7 +182,7 @@ export const Dashboard = ({ onManageOrders, onViewCustomers }) => {
             const isSolid = isHighest || isSecond || isThird;
             
             return (
-              <div key={i} className="flex flex-col items-center gap-4 w-full group">
+              <div key={i} className="flex flex-col items-center gap-2 sm:gap-4 w-full group min-w-[2rem] sm:min-w-[3rem] shrink-0 sm:shrink">
                 <div 
                   style={{ 
                     height: `${Math.min(100, Math.max(10, val * valueMultiplier))}%`,
@@ -191,9 +191,9 @@ export const Dashboard = ({ onManageOrders, onViewCustomers }) => {
                     backgroundColor: isHighest ? '#124C36' : (isSecond ? '#388E6D' : (isThird ? '#86EFAC' : 'transparent')),
                     border: !isSolid ? '2px solid #e2e8f0' : 'none'
                   }} 
-                  className="w-12 lg:w-16 rounded-full transition-all duration-500 cursor-pointer shadow-sm group-hover:scale-105"
+                  className="w-6 sm:w-10 md:w-12 lg:w-16 rounded-full transition-all duration-500 cursor-pointer shadow-sm group-hover:scale-105"
                 ></div>
-                <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">{labels[i]}</span>
+                <span className="text-[9px] sm:text-[11px] text-slate-400 font-bold uppercase tracking-wider">{labels[i]}</span>
               </div>
             );
           })}
