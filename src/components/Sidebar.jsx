@@ -14,7 +14,8 @@ import {
   ListTodo,
   Users2,
   UserPlus,
-  X
+  X,
+  Settings
 } from 'lucide-react';
 
 export const Sidebar = ({ onLogout, isMobileMenuOpen, setIsMobileMenuOpen }) => {
@@ -169,6 +170,12 @@ export const Sidebar = ({ onLogout, isMobileMenuOpen, setIsMobileMenuOpen }) => 
         <button onClick={() => handleNavClick('reports')} className={itemClass(isActive('reports'))}>
           <BarChart3 className={iconClass(isActive('reports'))} />
           <span className="truncate">Reports</span>
+        </button>
+
+        {/* Settings */}
+        <button onClick={() => handleNavClick('settings')} className={itemClass(isActive('settings'))}>
+          <Settings className={iconClass(isActive('settings'))} />
+          <span className="truncate">Settings</span>
         </button>
 
       </nav>

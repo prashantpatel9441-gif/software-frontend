@@ -38,6 +38,7 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
   const { showToast, ToastContainer } = useToast();
   const [activeTab, setActiveTab] = useState('invoices');
   const [searchTerm, setSearchTerm] = useState('');
+  const [companySettings, setCompanySettings] = useState(null);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [editingInvoice, setEditingInvoice] = useState(null);
   const [editForm, setEditForm] = useState({});
@@ -51,6 +52,34 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
   });
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchCompanySettings();
+  }, [activeTab]);
+
+  const fetchCompanySettings = async () => {
+    try {
+      const data = await api.get('/settings');
+      if (data) setCompanySettings(data);
+    } catch (e) {
+      console.error('Failed to fetch settings');
+    }
+  };
+
+  const numberToWords = (num) => {
+    const a = ['','One ','Two ','Three ','Four ', 'Five ','Six ','Seven ','Eight ','Nine ','Ten ','Eleven ','Twelve ','Thirteen ','Fourteen ','Fifteen ','Sixteen ','Seventeen ','Eighteen ','Nineteen '];
+    const b = ['', '', 'Twenty','Thirty','Forty','Fifty', 'Sixty','Seventy','Eighty','Ninety'];
+    if ((num = num.toString()).length > 9) return 'overflow';
+    const n = ('000000000' + num).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
+    if (!n) return;
+    let str = '';
+    str += (n[1] != 0) ? (a[Number(n[1])] || b[n[1][0]] + ' ' + a[n[1][1]]) + 'Crore ' : '';
+    str += (n[2] != 0) ? (a[Number(n[2])] || b[n[2][0]] + ' ' + a[n[2][1]]) + 'Lakh ' : '';
+    str += (n[3] != 0) ? (a[Number(n[3])] || b[n[3][0]] + ' ' + a[n[3][1]]) + 'Thousand ' : '';
+    str += (n[4] != 0) ? (a[Number(n[4])] || b[n[4][0]] + ' ' + a[n[4][1]]) + 'Hundred ' : '';
+    str += (n[5] != 0) ? ((str != '') ? 'and ' : '') + (a[Number(n[5])] || b[n[5][0]] + ' ' + a[n[5][1]]) : '';
+    return str.trim();
+  };
 
   // Fetch invoices from backend
   const fetchInvoices = async () => {
@@ -249,46 +278,240 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
 
   const buildInvoiceHTML = (detail, autoPrint = true) => {
     const itemsList = detail.items || [];
-    const itemRows = itemsList.map(item => `
+    
+    // Default fallback values if companySettings is not yet loaded or fields are empty
+    const cs = companySettings || {};
+    const compName = cs.companyName || 'GreenAdmin';
+    const compAddress = cs.address || '';
+    const compState = cs.state || '';
+    const compPhone = cs.telephone || '';
+    const bankName = cs.bankName || '';
+    const accountNo = cs.accountNumber || '';
+    const ifsc = cs.branchIfsc || '';
+    const terms = cs.termsAndConditions || '*(1) Payment should be made as per terms of payment.\n(2) Goods once sold will not be taken back.';
+    const notes = cs.notes || 'Thank You For Your Business.';
+
+    // Format dates
+    const fIssue = detail.issueDate ? (typeof detail.issueDate === 'string' ? detail.issueDate : new Date(detail.issueDate).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'})) : '';
+    
+    // Build Item Rows
+    let itemRows = '';
+    itemsList.forEach((item, index) => {
+      itemRows += `
+        <tr>
+          <td style="border-right: 1px solid #000; padding:4px 8px; text-align:center;">${index + 1}</td>
+          <td style="border-right: 1px solid #000; padding:4px 8px;">${item.product || item.description || ''}</td>
+          <td style="border-right: 1px solid #000; padding:4px 8px; text-align:center;">${item.qty}</td>
+          <td style="border-right: 1px solid #000; padding:4px 8px; text-align:right;">Rs. ${(item.price || 0).toLocaleString('en-IN', {minimumFractionDigits:2})}</td>
+          <td style="border-right: 1px solid #000; padding:4px 8px; text-align:right;">Rs. ${(item.disc || 0).toLocaleString('en-IN', {minimumFractionDigits:2})}</td>
+          <td style="padding:4px 8px; text-align:right;">Rs. ${(item.total || (item.qty * (item.price || 0))).toLocaleString('en-IN', {minimumFractionDigits:2})}</td>
+        </tr>
+      `;
+    });
+
+    const amountInWords = numberToWords(Math.round(detail.grandTotal || 0));
+
+    // Convert newlines to <br> for terms
+    const formattedTerms = terms.split('\n').map(t => `<div>${t}</div>`).join('');
+    const formattedNotes = notes.split('\n').map(t => `<div>${t}</div>`).join('');
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>${detail.documentNumber || detail.id || 'Invoice'}</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    @page { size: A4; margin: 0; }
+    body { 
+      font-family: 'Times New Roman', Times, serif; 
+      font-size: 12px; 
+      color: #000; 
+      width: 210mm;
+      min-height: 297mm;
+      padding: 15mm; 
+      margin: 0 auto;
+      background: white;
+      display: flex;
+      flex-direction: column;
+    }
+    .top-header { display: flex; justify-content: space-between; margin-bottom: 5px; }
+    .company-name { font-size: 18px; font-weight: bold; }
+    .company-addr { font-size: 12px; margin-top: 2px; }
+    .state-tel { text-align: right; font-weight: bold; font-size: 12px; }
+    
+    .invoice-title-container { display: flex; align-items: center; margin: 15px 0 10px 0; }
+    .line { flex-grow: 1; height: 2px; background-color: #000; }
+    .invoice-title { margin: 0 10px; font-size: 16px; font-style: italic; font-weight: bold; }
+    
+    .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+    .meta-table > tbody > tr > td { padding: 0; vertical-align: top; border: none; }
+    
+    .to-box { border: 1px solid #000; padding: 5px; height: 100%; min-height: 85px; }
+    .inv-details-table { width: 100%; border-collapse: collapse; height: 100%; }
+    .inv-details-table td { border: 1px solid #000; padding: 4px 6px; font-size: 12px; }
+    .inv-details-table td:first-child { font-weight: bold; width: 40%; }
+    
+    .main-table { width: 100%; border-collapse: collapse; border: 1px solid #000; flex-grow: 1; }
+    .main-table th { border: 1px solid #000; padding: 5px; font-size: 12px; font-weight: bold; text-align: center; height: 30px; }
+    .main-table td { font-size: 12px; }
+    
+    .summary-label { text-align: right; padding: 4px 8px; border: 1px solid #000; border-left: none; }
+    .summary-val { text-align: right; padding: 4px 8px; border: 1px solid #000; border-right: none; width: 120px; font-weight: bold; }
+    
+    .words-row { padding: 5px 8px; text-align: right; font-weight: bold; border-top: 1px solid #000; border-bottom: 1px solid #000; }
+    
+    .eoe { text-align: right; font-size: 11px; margin-top: 2px; font-weight: bold; padding-right: 5px; }
+    
+    .footer-table { width: 100%; margin-top: 15px; border-top: 2px solid #000; padding-top: 5px; }
+    .footer-table td { vertical-align: top; }
+    
+    .sign-box { text-align: right; margin-top: 40px; font-size: 12px; font-weight: bold; }
+    .bottom-thanks { text-align: center; font-weight: bold; font-size: 12px; margin-top: 20px; }
+    
+    @media print{
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; margin: 0; padding: 15mm; }
+      html, body { width: 210mm; height: 297mm; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="top-header">
+    <div>
+      <div class="company-name">${compName}</div>
+      <div class="company-addr">${compAddress.replace(/\\n/g, '<br/>')}</div>
+    </div>
+    <div class="state-tel">
+      <div>State : ${compState}</div>
+      <div>Tel : ${compPhone}</div>
+    </div>
+  </div>
+
+  <!-- Title Divider -->
+  <div class="invoice-title-container">
+    <div class="line"></div>
+    <div class="invoice-title">${detail.invoiceType || 'Invoice'}</div>
+    <div class="line"></div>
+  </div>
+
+  <!-- Meta Info -->
+  <table class="meta-table">
+    <tr>
+      <td style="width: 50%; padding-right: 10px;">
+        <div class="to-box">
+          <div>To :</div>
+          <div style="font-weight: bold; font-size: 14px; margin-top: 2px;">${detail.client || ''}</div>
+          <div style="margin-top: 2px;">${(detail.address || '').replace(/\\n/g, '<br/>')}</div>
+        </div>
+      </td>
+      <td style="width: 50%;">
+        <table class="inv-details-table">
+          <tr><td>Invoice No.</td><td>${detail.documentNumber || detail.id}</td></tr>
+          <tr><td>Invoice Date</td><td>${fIssue}</td></tr>
+          <tr><td>Reference</td><td></td></tr>
+          <tr><td>Payment Terms</td><td>${detail.payment || ''}</td></tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+
+  <!-- Main Items Table -->
+  <table class="main-table">
+    <thead>
       <tr>
-        <td style="padding:12px 16px;font-size:13px;color:#374151;border-bottom:1px solid #f3f4f6;">${item.product || item.description || ''}</td>
-        <td style="padding:12px 16px;text-align:center;font-size:13px;color:#6b7280;border-bottom:1px solid #f3f4f6;">${item.qty}</td>
-        <td style="padding:12px 16px;text-align:right;font-size:13px;color:#6b7280;border-bottom:1px solid #f3f4f6;">&#x20B9;${(item.price || 0).toLocaleString('en-IN')}</td>
-        <td style="padding:12px 16px;text-align:right;font-size:13px;font-weight:700;color:#111827;border-bottom:1px solid #f3f4f6;">&#x20B9;${(item.total || (item.qty * (item.price || 0))).toLocaleString('en-IN')}</td>
-      </tr>`).join('');
-    const fIssue = detail.issueDate ? (typeof detail.issueDate === 'string' ? detail.issueDate : new Date(detail.issueDate).toLocaleDateString('en-IN')) : '—';
-    const fDue = detail.dueDate ? (typeof detail.dueDate === 'string' ? detail.dueDate : new Date(detail.dueDate).toLocaleDateString('en-IN')) : '';
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${detail.id || 'Invoice'}</title>
-    <style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#111;padding:40px;}
-    .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:24px;border-bottom:2px solid #f3f4f6;}
-    .brand{font-size:26px;font-weight:900;color:#059669;}.brand-sub{font-size:11px;color:#9ca3af;margin-top:3px;}
-    .inv-meta{text-align:right;}.inv-id{font-size:20px;font-weight:800;color:#111;}.inv-date{font-size:11px;color:#9ca3af;margin-top:3px;}
-    .badge{display:inline-block;margin-top:8px;padding:4px 14px;border-radius:99px;font-size:11px;font-weight:700;background:#ecfdf5;color:#059669;border:1px solid #a7f3d0;}
-    .client-box{background:#f9fafb;border-radius:12px;padding:20px;margin-bottom:28px;}
-    .label{font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;}
-    .client-name{font-size:16px;font-weight:800;color:#111;}.client-info{font-size:12px;color:#6b7280;margin-top:3px;}
-    table{width:100%;border-collapse:collapse;margin-bottom:24px;}
-    thead tr{background:#f9fafb;}thead th{padding:10px 16px;font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;}
-    .totals{border-top:2px solid #f3f4f6;padding-top:16px;}
-    .total-row{display:flex;justify-content:space-between;padding:5px 0;font-size:13px;color:#6b7280;}
-    .grand{font-size:18px;font-weight:900;color:#059669;border-top:2px solid #e5e7eb;margin-top:10px;padding-top:12px;}
-    .footer{margin-top:40px;text-align:center;font-size:11px;color:#d1d5db;}
-    @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}</style></head>
-    <body><div class="header"><div><div class="brand">GreenAdmin</div><div class="brand-sub">admin@green.com &nbsp;|&nbsp; +91 11 2345 6789</div></div>
-    <div class="inv-meta"><div class="inv-id">${detail.id}</div><div class="inv-date">Issued: ${fIssue}${fDue ? '&nbsp;&nbsp;Due: ' + fDue : ''}</div>
-    <span class="badge">${detail.payment || ''}</span></div></div>
-    <div class="client-box"><div class="label">Bill To</div><div class="client-name">${detail.client || ''}</div>
-    <div class="client-info">${detail.phone || ''}</div><div class="client-info">${detail.address || ''}</div></div>
-    <table><thead><tr><th style="text-align:left;">Description</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Unit Price</th><th style="text-align:right;">Total</th></tr></thead>
-    <tbody>${itemRows}</tbody></table>
-    <div class="totals" style="max-width:320px;margin-left:auto;">
-    <div class="total-row"><span>Subtotal</span><span style="color:#111;font-weight:600;">&#x20B9;${(detail.subtotal || 0).toLocaleString('en-IN')}</span></div>
-    ${(detail.discount || 0) > 0 ? `<div class="total-row" style="color:#059669;"><span>Discount</span><span style="font-weight:600;">&#x2212; &#x20B9;${detail.discount.toLocaleString('en-IN')}</span></div>` : ''}
-    ${(detail.tax || 0) > 0 ? `<div class="total-row"><span>GST</span><span style="color:#111;font-weight:600;">&#x20B9;${detail.tax.toLocaleString('en-IN')}</span></div>` : ''}
-    <div class="total-row grand"><span>Grand Total</span><span>&#x20B9;${(detail.grandTotal || 0).toLocaleString('en-IN')}</span></div></div>
-    <div class="footer">Thank you for your business! &#8212; GreenAdmin</div>
-    ${autoPrint ? '<script>window.onload=()=>{window.print();window.onafterprint=()=>window.close();}<\/script>' : ''}
-    </body></html>`;
+        <th style="width: 6%;">Sr<br/>No.</th>
+        <th style="width: 44%;">Item Name / Description</th>
+        <th style="width: 10%;">Quantity</th>
+        <th style="width: 13%;">Unit Price</th>
+        <th style="width: 12%;">Discount</th>
+        <th style="width: 15%;">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${itemRows}
+      <tr style="height: 100%;">
+        <td style="border-right: 1px solid #000;"></td>
+        <td style="border-right: 1px solid #000;"></td>
+        <td style="border-right: 1px solid #000;"></td>
+        <td style="border-right: 1px solid #000;"></td>
+        <td style="border-right: 1px solid #000;"></td>
+        <td></td>
+      </tr>
+      
+      <!-- Totals Section -->
+      <tr>
+        <td colspan="4" style="border-top: 1px solid #000; border-right: 1px solid #000;"></td>
+        <td class="summary-label" style="border-top: 1px solid #000;">Sub Total :</td>
+        <td class="summary-val" style="border-top: 1px solid #000;">Rs. ${(detail.subtotal || 0).toLocaleString('en-IN', {minimumFractionDigits:2})}</td>
+      </tr>
+      <tr>
+        <td colspan="4" style="border-right: 1px solid #000;"></td>
+        <td class="summary-label">Other Charge :</td>
+        <td class="summary-val">Rs. 0.00</td>
+      </tr>
+      <tr>
+        <td colspan="4" style="border-right: 1px solid #000;"></td>
+        <td class="summary-label">Shipping Charge :</td>
+        <td class="summary-val">Rs. 0.00</td>
+      </tr>
+      <tr>
+        <td colspan="4" style="border-right: 1px solid #000;"></td>
+        <td class="summary-label">Round Off :</td>
+        <td class="summary-val">Rs. 0.00</td>
+      </tr>
+      <tr>
+        <td colspan="4" style="border-right: 1px solid #000;"></td>
+        <td class="summary-label" style="font-weight: bold;">Total :</td>
+        <td class="summary-val">Rs. ${(detail.grandTotal || 0).toLocaleString('en-IN', {minimumFractionDigits:2})}</td>
+      </tr>
+      <tr>
+        <td colspan="6" class="words-row">
+          ${amountInWords} Only /-
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="eoe">E. & O. E.</div>
+
+  <!-- Footer -->
+  <table class="footer-table">
+    <tr>
+      <td style="width: 50%; padding-right: 10px;">
+        <div style="font-weight: bold; font-size: 11px; margin-bottom: 3px;">Terms & Condition :</div>
+        <div style="font-size: 11px;">${formattedTerms}</div>
+        
+        <div style="margin-top: 15px;">
+          <div style="font-weight: bold; font-size: 11px; margin-bottom: 2px;">Notes :</div>
+          <div style="font-size: 11px;">${formattedNotes}</div>
+        </div>
+      </td>
+      <td style="width: 50%; padding-left: 10px;">
+        <div style="font-weight: bold; font-size: 11px; margin-bottom: 5px;">Company's Bank Details</div>
+        <table style="width: 100%; font-size: 11px;">
+          <tr><td style="width: 100px;">Bank Name</td><td>: ${bankName}</td></tr>
+          <tr><td>A/C No.</td><td>: ${accountNo}</td></tr>
+          <tr><td>Branch & IFS Code</td><td>: ${ifsc}</td></tr>
+        </table>
+
+        <div class="sign-box">
+          <div style="margin-bottom: 40px; font-weight: normal;">For ${compName}</div>
+          <div>Authorised Signatory</div>
+        </div>
+      </td>
+    </tr>
+  </table>
+
+  <div class="invoice-title-container" style="margin-top: 15px; margin-bottom: 0;">
+    <div class="line" style="height: 2px;"></div>
+    <div class="bottom-thanks">Thank You For Your Business.</div>
+    <div class="line" style="height: 2px;"></div>
+  </div>
+
+  ${autoPrint ? '<script>window.onload=()=>{window.print();window.onafterprint=()=>window.close();}</script>' : ''}
+</body>
+</html>`;
   };
 
 
@@ -300,20 +523,9 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
     if (win) { win.document.write(html); win.document.close(); }
   };
 
-  // Download button: save as .html file to PC
+  // Download button: now triggers the Print Dialog so user can Save as PDF
   const handleDownloadFile = (inv) => {
-    const detail = inv.items ? inv : invoices.find(i => i.id === inv.id);
-    if (!detail) return;
-    const html = buildInvoiceHTML(detail, false); // no auto-print script
-    const blob = new Blob([html], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${detail.id || 'invoice'}.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    handlePrintPDF(inv);
   };
 
   return (
@@ -528,7 +740,7 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
                       <button
                         onClick={() => handleDownloadFile(inv)}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all cursor-pointer"
-                        title="Download to PC"
+                        title="Save as PDF"
                       >
                         <Download className="w-3.5 h-3.5" />
                       </button>

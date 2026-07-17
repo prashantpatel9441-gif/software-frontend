@@ -8,6 +8,73 @@ import {
   User, X, AlertCircle, Clock, TrendingDown, TrendingUp
 } from 'lucide-react';
 
+const ProductSearch = ({ item, productList, onSelect, onChange }) => {
+  const [search, setSearch] = useState(item.product || '');
+  const [isOpen, setIsOpen] = useState(false);
+  const wrapperRef = useRef(null);
+
+  useEffect(() => {
+    if (item.product !== search) {
+      setSearch(item.product || '');
+    }
+  }, [item.product]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filtered = productList.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || (p.sku && p.sku.toLowerCase().includes(search.toLowerCase())));
+
+  return (
+    <div className="relative" ref={wrapperRef}>
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            onChange(e.target.value);
+            setIsOpen(true);
+          }}
+          onFocus={() => setIsOpen(true)}
+          placeholder="Search Product..."
+          className="w-full pl-8 pr-3 py-2 bg-slate-50/50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 cursor-text font-bold text-slate-700 text-xs"
+        />
+        {search && (
+          <button onClick={() => { setSearch(''); onChange(''); onSelect(''); setIsOpen(true); }} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+      {isOpen && search && filtered.length > 0 && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+          {filtered.map(p => (
+            <div
+              key={p._id}
+              onClick={() => {
+                onSelect(p.name);
+                setSearch(p.name);
+                setIsOpen(false);
+              }}
+              className="px-3 py-2 cursor-pointer hover:bg-emerald-50 border-b border-slate-50 last:border-0"
+            >
+              <div className="text-xs font-bold text-slate-800">{p.name}</div>
+              {p.sku && <div className="text-[10px] text-slate-400">SKU: {p.sku}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
   const { showToast, ToastContainer } = useToast();
   const { customers, syncFromInvoice, getCustomerPricing } = useCRM();
@@ -40,6 +107,12 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
   const [invoiceId, setInvoiceId] = useState('');
   const [productList, setProductList] = useState([]);
   const [priceHints, setPriceHints] = useState({});
+  const [invoiceType, setInvoiceType] = useState('');
+  const [documentNumber, setDocumentNumber] = useState('');
+  const [allInvoices, setAllInvoices] = useState([]);
+  const [issueDate, setIssueDate] = useState(() => {
+    return new Date().toISOString().split('T')[0];
+  });
 
   const searchRef = useRef(null);
   const dropdownRef = useRef(null);
@@ -96,6 +169,11 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
       setPaymentStatus(draftData.paymentStatus || 'Pending (Credit)');
       setAmountReceived(draftData.amountReceived || 0);
       setInvoiceId(draftData.id || draftData.invoiceId || '');
+      setInvoiceType(draftData.invoiceType || '');
+      setDocumentNumber(draftData.documentNumber || '');
+      if (draftData.issueDate) {
+        setIssueDate(new Date(draftData.issueDate).toISOString().split('T')[0]);
+      }
       if (draftData.items?.length > 0) {
         setItems(draftData.items.map((item, idx) => ({
           id: Date.now() + idx,
@@ -118,19 +196,51 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
 
   // ── Fetch products ─────────────────────────────────────────
   useEffect(() => {
-    api.get('/products').then(data => { if (Array.isArray(data)) setProductList(data); }).catch(() => {});
+    api.get('/products', { params: { limit: 1000 } })
+      .then(data => {
+        if (data && data.products) setProductList(data.products);
+        else if (Array.isArray(data)) setProductList(data);
+      })
+      .catch(() => {});
   }, []);
 
-  // ── Fetch next invoice ID ──────────────────────────────────
+  // ── Fetch next invoice ID & all invoices ───────────────────
   useEffect(() => {
-    if (isEditingDraft) return;
     api.get('/invoices').then(invs => {
-      const count = Array.isArray(invs) ? invs.length : 0;
-      setInvoiceId(`INV-2026-${String(count + 1).padStart(3, '0')}`);
+      if (Array.isArray(invs)) {
+        setAllInvoices(invs);
+        if (!isEditingDraft) {
+          setInvoiceId(`INV-2026-${String(invs.length + 1).padStart(3, '0')}`);
+        }
+      }
     }).catch(() => {
-      setInvoiceId(`INV-2026-${String(Math.floor(Math.random() * 900) + 100)}`);
+      if (!isEditingDraft) setInvoiceId(`INV-2026-${String(Math.floor(Math.random() * 900) + 100)}`);
     });
   }, [isEditingDraft]);
+
+  // ── Auto-increment Document Number based on Customer ───────
+  useEffect(() => {
+    if (!customerName || allInvoices.length === 0) return;
+    if (isEditingDraft && documentNumber) return; // Skip if editing draft and already has a doc num
+
+    const lastInv = allInvoices.find(inv => inv.client === customerName && inv.documentNumber);
+    if (lastInv && lastInv.documentNumber) {
+      const lastDoc = lastInv.documentNumber.trim();
+      const match = lastDoc.match(/^(.*?)(\d+)$/);
+      if (match) {
+        const prefix = match[1];
+        const numberStr = match[2];
+        const padding = numberStr.length;
+        const num = parseInt(numberStr, 10);
+        const nextNum = (num + 1).toString().padStart(padding, '0');
+        setDocumentNumber(`${prefix}${nextNum}`);
+      } else {
+        setDocumentNumber(lastDoc + ' 1');
+      }
+    } else {
+      setDocumentNumber('1');
+    }
+  }, [customerName, allInvoices, isEditingDraft]);
 
   // ── Calculate totals ───────────────────────────────────────
   useEffect(() => {
@@ -261,7 +371,7 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
       city: customerCity.trim(),
       state: customerState.trim(),
       address: billingAddress.trim(),
-      issueDate: new Date(),
+      issueDate: issueDate ? new Date(issueDate) : new Date(),
       payment: calculatedPayment,
       delivery: 'Processing',
       items: items.filter(i => i.product.trim()).map(i => ({
@@ -282,6 +392,8 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
       paymentMethod,
       notes: notes.trim(),
       customerType,
+      invoiceType: invoiceType.trim(),
+      documentNumber: documentNumber.trim(),
     };
 
     try {
@@ -356,6 +468,25 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left */}
         <div className="lg:col-span-2 space-y-6">
+
+          {/* Bill Settings Card */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+            <h3 className="font-bold text-slate-800 text-base border-b border-slate-50 pb-2">Bill Settings</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Invoice Date</label>
+                <input type="date" value={issueDate} onChange={e => setIssueDate(e.target.value)} className={inputClass} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Invoice Type <span className="text-slate-400 font-normal">(Optional)</span></label>
+                <input type="text" maxLength={50} value={invoiceType} onChange={e => setInvoiceType(e.target.value)} placeholder="e.g. Tax Invoice" className={inputClass} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Document Number</label>
+                <input type="text" maxLength={50} value={documentNumber} onChange={e => setDocumentNumber(e.target.value)} placeholder="e.g. 1, mm1..." className={inputClass} />
+              </div>
+            </div>
+          </div>
 
           {/* Customer Details Card */}
           <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-5">
@@ -496,7 +627,7 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
           {/* Order Items Card */}
           <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
             <h3 className="font-bold text-slate-800 text-base border-b border-slate-50 pb-3">Order Items</h3>
-            <div className="overflow-x-auto">
+            <div className="overflow-visible">
               <table className="w-full text-left text-xs min-w-[600px]">
                 <thead>
                   <tr className="text-slate-400 font-bold uppercase tracking-wider border-b border-slate-100">
@@ -515,11 +646,12 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
                     return (
                       <tr key={item.id}>
                         <td className="py-3 pr-2 align-top">
-                          <select value={item.product} onChange={e => handleProductSelect(item.id, e.target.value)}
-                            className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 cursor-pointer font-bold text-slate-700 text-xs">
-                            <option value="">Select Product...</option>
-                            {productList.map(p => <option key={p._id} value={p.name}>{p.name} (SKU: {p.sku})</option>)}
-                          </select>
+                          <ProductSearch 
+                            item={item} 
+                            productList={productList} 
+                            onChange={(val) => handleItemChange(item.id, 'product', val)}
+                            onSelect={(val) => handleProductSelect(item.id, val)} 
+                          />
                         </td>
                         <td className="py-3 pr-2 align-top">
                           {(() => {

@@ -39,6 +39,8 @@ export const ProductManagement = () => {
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
   const [viewImageUrl, setViewImageUrl] = useState(null);
 
   const [isVariantModalOpen, setIsVariantModalOpen] = useState(false);
@@ -113,9 +115,22 @@ export const ProductManagement = () => {
   const fetchProducts = async () => {
     try {
       setLoading(true);
-      const data = await api.get('/products');
-      if (Array.isArray(data)) {
+      const data = await api.get('/products', {
+        params: {
+          page: currentPage,
+          limit: itemsPerPage,
+          search: searchTerm || filters.name || filters.sku,
+          category: filters.category,
+          status: filters.status
+        }
+      });
+      if (data && data.products) {
+        setProducts(data.products.map(p => ({ ...p, id: p._id })));
+        setTotalPages(data.totalPages || 1);
+        setTotalItems(data.totalItems || 0);
+      } else if (Array.isArray(data)) {
         setProducts(data.map(p => ({ ...p, id: p._id })));
+        setTotalItems(data.length);
       }
     } catch (error) {
       console.error('Error fetching products:', error);
@@ -136,14 +151,19 @@ export const ProductManagement = () => {
   };
 
   useEffect(() => {
-    fetchProducts();
     fetchCategories();
   }, []);
 
-  // Handle product selections
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchProducts();
+    }, 400); // debounce
+    return () => clearTimeout(timer);
+  }, [currentPage, itemsPerPage, searchTerm, filters]);
+
   const handleSelectAll = (e) => {
     if (e.target.checked) {
-      setSelectedProducts(filteredProducts.map(p => p.id));
+      setSelectedProducts(currentProducts.map(p => p.id));
     } else {
       setSelectedProducts([]);
     }
@@ -307,37 +327,9 @@ export const ProductManagement = () => {
     showToast('Export successful!', 'success');
   };
 
-  // Filter products by search term and filters
-  const filteredProducts = products.filter(p => {
-    const term = searchTerm.toLowerCase();
-    const matchesSearch = !term || (
-      (p.name || '').toLowerCase().includes(term) ||
-      (p.category || '').toLowerCase().includes(term) ||
-      (p.variants || []).some(v => (v.group || '').toLowerCase().includes(term) || (v.options || []).some(opt => (opt || '').toLowerCase().includes(term))) ||
-      (p.variantDetails || []).some(vd => (vd.variantName || '').toLowerCase().includes(term) || (vd.sku || '').toLowerCase().includes(term)) ||
-      (p.sku || '').toLowerCase().includes(term) ||
-      (p.vendor || '').toLowerCase().includes(term)
-    );
-    const matchesName = !filters.name || (p.name || '').toLowerCase().includes(filters.name.toLowerCase());
-    const matchesSku = !filters.sku || (p.sku || '').toLowerCase().includes(filters.sku.toLowerCase());
-    const matchesCategory = !filters.category || p.category === filters.category;
-    const matchesStatus = !filters.status || p.status === filters.status;
-
-    return matchesSearch && matchesName && matchesSku && matchesCategory && matchesStatus;
-  });
-
-  // Pagination Logic
-  const indexOfLastProduct = currentPage * itemsPerPage;
-  const indexOfFirstProduct = indexOfLastProduct - itemsPerPage;
-  const currentProducts = filteredProducts.slice(indexOfFirstProduct, indexOfLastProduct);
-  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / itemsPerPage));
-
-  // If page index is higher than actual page limits (e.g. after deletion/filtering), reset it
-  useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
-    }
-  }, [filteredProducts.length, totalPages, currentPage]);
+  // We already fetched filtered and paginated data from the server.
+  // We can just use the products list as is for currentProducts.
+  const currentProducts = products;
 
   return (
     <div className="space-y-6 animate-fade-in pb-12 relative">
@@ -486,7 +478,7 @@ export const ProductManagement = () => {
                 <th className="py-3.5 px-4 w-10 text-center">
                   <input
                     type="checkbox"
-                    checked={filteredProducts.length > 0 && selectedProducts.length === filteredProducts.length}
+                    checked={currentProducts.length > 0 && selectedProducts.length === currentProducts.length}
                     onChange={handleSelectAll}
                     className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                   />
@@ -701,7 +693,7 @@ export const ProductManagement = () => {
         <div className="px-6 py-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/30">
           <div className="flex items-center gap-4">
             <div className="text-xs text-slate-500 font-bold">
-              Showing {filteredProducts.length > 0 ? indexOfFirstProduct + 1 : 0} to {Math.min(indexOfLastProduct, filteredProducts.length)} of {filteredProducts.length} entries
+              Showing {totalItems > 0 ? ((currentPage - 1) * itemsPerPage) + 1 : 0} to {Math.min(currentPage * itemsPerPage, totalItems)} of {totalItems} entries
             </div>
             <div className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-lg border border-slate-200">
               <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Per Page:</span>

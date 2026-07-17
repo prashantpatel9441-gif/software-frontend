@@ -1,22 +1,39 @@
-import React, { useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import React, { useState, Suspense, lazy, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useParams, useLocation, Outlet } from 'react-router-dom';
 import Layout from './components/Layout';
-import Dashboard from './pages/Dashboard';
-import SalesOrder from './pages/SalesOrder';
-import NewBilling from './pages/NewBilling';
-import ProductManagement from './pages/ProductManagement';
-import Categories from './pages/Categories';
-import Collections from './pages/Collections';
-import Variants from './pages/Variants';
-import Inventory from './pages/Inventory';
-import Reports from './pages/Reports';
-import Drafts from './pages/Drafts';
-import Login from './pages/Login';
-import { Customers } from './pages/Customers';
-import { CustomerProfile } from './pages/CustomerProfile';
-import { Users } from './pages/Users';
+import { cancelPendingGetRequests } from './services/api';
 
-const ProtectedRoute = ({ children }) => {
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const SalesOrder = lazy(() => import('./pages/SalesOrder'));
+const NewBilling = lazy(() => import('./pages/NewBilling'));
+const ProductManagement = lazy(() => import('./pages/ProductManagement'));
+const Categories = lazy(() => import('./pages/Categories'));
+const Collections = lazy(() => import('./pages/Collections'));
+const Variants = lazy(() => import('./pages/Variants'));
+const Inventory = lazy(() => import('./pages/Inventory').then(module => ({ default: module.Inventory })));
+const Reports = lazy(() => import('./pages/Reports'));
+const Drafts = lazy(() => import('./pages/Drafts'));
+const Login = lazy(() => import('./pages/Login'));
+const Customers = lazy(() => import('./pages/Customers').then(module => ({ default: module.Customers })));
+const CustomerProfile = lazy(() => import('./pages/CustomerProfile').then(module => ({ default: module.CustomerProfile })));
+const Users = lazy(() => import('./pages/Users').then(module => ({ default: module.Users })));
+const Settings = lazy(() => import('./pages/Settings').then(module => ({ default: module.Settings })));
+
+const SuspenseFallback = () => (
+  <div className="flex items-center justify-center min-h-screen bg-slate-50">
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div>
+  </div>
+);
+
+const RouteChangeTracker = () => {
+  const location = useLocation();
+  useEffect(() => {
+    cancelPendingGetRequests();
+  }, [location.pathname]);
+  return null;
+};
+
+const ProtectedRoute = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'));
   
   if (!isAuthenticated) {
@@ -31,7 +48,7 @@ const ProtectedRoute = ({ children }) => {
   
   return (
     <Layout onLogout={handleLogout}>
-      {children}
+      <Outlet />
     </Layout>
   );
 };
@@ -82,8 +99,6 @@ const CustomersWrapper = () => {
   );
 };
 
-import { useParams, useLocation } from 'react-router-dom';
-
 const CustomerProfileWrapper = () => {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -119,30 +134,31 @@ const LoginWrapper = () => {
 const App = () => {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<LoginWrapper />} />
-        
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        
-        <Route path="/dashboard" element={<ProtectedRoute><DashboardWrapper /></ProtectedRoute>} />
-        <Route path="/sales" element={<ProtectedRoute><SalesOrderWrapper /></ProtectedRoute>} />
-        <Route path="/billing" element={<ProtectedRoute><NewBillingWrapper /></ProtectedRoute>} />
-        <Route path="/drafts" element={<ProtectedRoute><DraftsWrapper /></ProtectedRoute>} />
-        
-        <Route path="/customers" element={<ProtectedRoute><CustomersWrapper /></ProtectedRoute>} />
-        <Route path="/customers/:id" element={<ProtectedRoute><CustomerProfileWrapper /></ProtectedRoute>} />
-        
-        <Route path="/products" element={<ProtectedRoute><ProductManagement /></ProtectedRoute>} />
-        <Route path="/categories" element={<ProtectedRoute><Categories /></ProtectedRoute>} />
-        <Route path="/collections" element={<ProtectedRoute><Collections /></ProtectedRoute>} />
-        <Route path="/variants" element={<ProtectedRoute><Variants /></ProtectedRoute>} />
-        <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
-        
-        <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
-        <Route path="/users" element={<ProtectedRoute><Users /></ProtectedRoute>} />
-        
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
+      <RouteChangeTracker />
+      <Suspense fallback={<SuspenseFallback />}>
+        <Routes>
+          <Route path="/login" element={<LoginWrapper />} />
+          
+          <Route path="/" element={<ProtectedRoute />}>
+            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route path="dashboard" element={<DashboardWrapper />} />
+            <Route path="sales" element={<SalesOrderWrapper />} />
+            <Route path="billing" element={<NewBillingWrapper />} />
+            <Route path="drafts" element={<DraftsWrapper />} />
+            <Route path="customers" element={<CustomersWrapper />} />
+            <Route path="customers/:id" element={<CustomerProfileWrapper />} />
+            <Route path="products" element={<ProductManagement />} />
+            <Route path="categories" element={<Categories />} />
+            <Route path="collections" element={<Collections />} />
+            <Route path="variants" element={<Variants />} />
+            <Route path="inventory" element={<Inventory />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="reports" element={<Reports />} />
+            <Route path="users" element={<Users />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Route>
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useToast } from '../components/Toast';
 import { api } from '../services/api';
@@ -21,7 +21,8 @@ import {
   ClipboardCheck,
   ChevronDown,
   ChevronUp,
-  Tag
+  Tag,
+  ArrowLeft
 } from 'lucide-react';
 
 export const Inventory = () => {
@@ -35,6 +36,22 @@ export const Inventory = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedWarehouse, setSelectedWarehouse] = useState('All');
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [limit, setLimit] = useState(10); // Items per page
+  const [activeTab, setActiveTab] = useState('products');
+  const [viewingCategory, setViewingCategory] = useState(null);
+
+  const [metrics, setMetrics] = useState({
+    totalInventoryValue: 0,
+    totalItemsInStock: 0,
+    lowStockAlerts: 0,
+    deadStockItems: 0,
+    uniqueCategories: ['All'],
+    uniqueWarehouses: ['All'],
+    lowStockItems: []
+  });
 
   // Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -59,8 +76,22 @@ export const Inventory = () => {
   const fetchInventory = async () => {
     try {
       setLoading(true);
-      const data = await api.get('/inventory');
-      if (Array.isArray(data)) {
+      const data = await api.get('/inventory', {
+        params: {
+          page: 1, // We fetch all and paginate on frontend
+          limit: 10000,
+          search: searchTerm,
+          category: selectedCategory,
+          warehouse: selectedWarehouse
+        }
+      });
+      if (data && data.inventory) {
+        setInventory(data.inventory);
+        // We will calculate totalPages on the frontend after grouping
+        if (data.metrics) {
+          setMetrics(prev => ({...prev, ...data.metrics}));
+        }
+      } else if (Array.isArray(data)) {
         setInventory(data);
       }
     } catch (error) {
@@ -78,8 +109,10 @@ export const Inventory = () => {
 
   const fetchProducts = async () => {
     try {
-      const data = await api.get('/products');
-      if (Array.isArray(data)) {
+      const data = await api.get('/products', { params: { limit: 1000 } });
+      if (data && data.products) {
+        setProducts(data.products);
+      } else if (Array.isArray(data)) {
         setProducts(data);
       }
     } catch (error) {
@@ -106,45 +139,63 @@ export const Inventory = () => {
   };
 
   useEffect(() => {
-    const init = async () => {
-      await fetchProducts();
-      // Auto-sync first, then load inventory
-      try {
-        await api.post('/inventory/sync', {});
-      } catch (e) {
-        // silent fail — Atlas might be disconnected
-      }
-      await fetchInventory();
-    };
-    init();
+    // Auto-sync new products into inventory when the page loads
+    syncAndRefresh();
   }, []);
+  // Fetch when pagination or filters change
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchInventory();
+    }, 400); // Debounce
+    return () => clearTimeout(timer);
+  }, [searchTerm, selectedCategory, selectedWarehouse]);
 
-  // Derived Summary Metrics
-  const totalInventoryValue = inventory.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
-  const totalItemsInStock = inventory.reduce((sum, item) => sum + item.quantity, 0);
-  const lowStockAlerts = inventory.filter(item => item.quantity < 10 && item.quantity > 0).length;
-  const deadStockItems = inventory.filter(item => item.status === 'Dead Stock').length;
+  // Derived Summary Metrics from Backend
+  const { totalInventoryValue, totalItemsInStock, lowStockAlerts, deadStockItems, uniqueCategories, uniqueWarehouses, lowStockItems, categoryStats = [] } = metrics;
 
-  const uniqueCategories = ['All', ...new Set(inventory.map(item => item.category).filter(Boolean))];
-  const uniqueWarehouses = ['All', ...new Set(inventory.map(item => item.warehouse).filter(Boolean))];
+  // Search and Double Filters (Already handled by backend, but we map it directly)
+  const filteredInventory = inventory;
 
-  // Search and Double Filters
-  const filteredInventory = inventory.filter(item => {
-    const matchesSearch = (item.sku && item.sku.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (item.name && item.name.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesCategory = selectedCategory === 'All' || item.category === selectedCategory;
-    const matchesWarehouse = selectedWarehouse === 'All' || item.warehouse === selectedWarehouse;
+  // Apply frontend pagination directly to the flat list
+  const computedTotalPages = Math.max(1, Math.ceil(filteredInventory.length / limit));
+  const paginatedItems = useMemo(() => {
+    const start = (currentPage - 1) * limit;
+    return filteredInventory.slice(start, start + limit);
+  }, [filteredInventory, currentPage, limit]);
 
-    return matchesSearch && matchesCategory && matchesWarehouse;
-  });
+  // Ensure currentPage doesn't exceed computedTotalPages
+  useEffect(() => {
+    if (currentPage > computedTotalPages) {
+      setCurrentPage(computedTotalPages);
+    }
+  }, [computedTotalPages, currentPage]);
+
+  const handleSearchChange = (e) => {
+    setSearchTerm(e.target.value);
+    setCurrentPage(1);
+  };
+  const handleCategoryChange = (e) => {
+    setSelectedCategory(e.target.value);
+    setCurrentPage(1);
+  };
+  const handleWarehouseChange = (e) => {
+    setSelectedWarehouse(e.target.value);
+    setCurrentPage(1);
+  };
 
   // Export CSV Helper
-  const exportToCSV = () => {
-    const csvRows = [];
-    const headers = ['SKU', 'PRODUCT NAME', 'CATEGORY', 'WAREHOUSE', 'QUANTITY', 'UNIT PRICE', 'TOTAL VALUE', 'STATUS'];
-    csvRows.push(headers.join(','));
+  const exportToCSV = async () => {
+    try {
+      const data = await api.get('/inventory', {
+        params: { limit: 10000, search: searchTerm, category: selectedCategory, warehouse: selectedWarehouse }
+      });
+      const exportData = data.inventory || data;
+      
+      const csvRows = [];
+      const headers = ['SKU', 'PRODUCT NAME', 'CATEGORY', 'WAREHOUSE', 'QUANTITY', 'UNIT PRICE', 'TOTAL VALUE', 'STATUS'];
+      csvRows.push(headers.join(','));
 
-    filteredInventory.forEach(item => {
+      exportData.forEach(item => {
       const totalValue = item.quantity * item.unitPrice;
       const values = [
         `"${item.sku}"`,
@@ -168,6 +219,10 @@ export const Inventory = () => {
     link.click();
     document.body.removeChild(link);
     showToast('Export successful!', 'success');
+    } catch (error) {
+      console.error('Error exporting inventory:', error);
+      showToast('Export failed!', 'error');
+    }
   };
 
   // Open Form Helpers
@@ -178,7 +233,10 @@ export const Inventory = () => {
     setExpandedProducts(prev => ({ ...prev, [sku]: !prev[sku] }));
   };
 
-  const openAddModal = () => {
+  const openAddModal = async () => {
+    if (products.length === 0) {
+      await fetchProducts();
+    }
     setItemForm({
       sku: '',
       name: '',
@@ -239,11 +297,6 @@ export const Inventory = () => {
           });
         }
       });
-      
-      if (hasVariants && hasNoQuantities) {
-        showToast("Please enter a quantity for at least one variant.", 'error');
-        return;
-      }
       
       try {
         await api.post('/inventory/bulk', { items: itemsToSubmit });
@@ -408,33 +461,116 @@ export const Inventory = () => {
       </div>
 
       {/* Critical Stock Alert Banner */}
-      {inventory.some(item => item.quantity < 10 && item.quantity > 0) && (
-        <div className="bg-emerald-50/50 border border-emerald-200/60 rounded-2xl p-4 shadow-sm relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-1.5 h-full bg-emerald-500"></div>
-          <div className="flex items-start gap-4">
-            <div className="p-2.5 bg-emerald-100 text-emerald-600 rounded-xl flex-shrink-0 animate-pulse">
-              <AlertTriangle className="w-6 h-6" />
-            </div>
-            <div className="flex-1">
-              <h3 className="text-sm font-extrabold text-emerald-800 tracking-tight">Attention: Low Stock Alert!</h3>
-              <p className="text-xs text-emerald-600/80 mt-0.5 font-medium mb-3">
-                The following items have dropped below 10 units and require immediate restocking.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {inventory.filter(item => item.quantity < 10 && item.quantity > 0).map(item => (
-                  <div key={item.sku} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-emerald-100 rounded-lg shadow-sm">
-                    <span className="text-[11px] font-bold text-slate-700">{item.name} {item.variant ? `(${item.variant})` : ''}</span>
-                    <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-700">{item.quantity} left</span>
+      {lowStockItems.length > 0 && (
+        <div className="bg-rose-50/40 border border-rose-200/60 rounded-2xl shadow-sm relative overflow-hidden mt-6">
+          <div className="absolute top-0 left-0 w-1.5 h-full bg-rose-500"></div>
+          <div className="p-5 sm:p-6">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-rose-100 text-rose-600 rounded-2xl flex-shrink-0 shadow-sm animate-pulse">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-extrabold text-rose-900 tracking-tight">Critical Low Stock Alert</h3>
+                <p className="text-sm text-rose-700/80 mt-0.5 font-medium mb-4">
+                  {lowStockItems.length} items have dropped below the minimum threshold (10 units) and require immediate restocking.
+                </p>
+                
+                <div className="bg-white border border-rose-100/60 rounded-xl overflow-hidden shadow-sm">
+                  <div className="max-h-[220px] overflow-y-auto no-scrollbar">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-rose-50/50 sticky top-0 z-10 backdrop-blur-sm">
+                        <tr>
+                          <th className="py-2.5 px-4 font-extrabold text-rose-800 text-[10px] uppercase tracking-wider">Product Name & Variant</th>
+                          <th className="py-2.5 px-4 font-extrabold text-rose-800 text-[10px] uppercase tracking-wider text-right">Remaining Stock</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-rose-50">
+                        {lowStockItems.map((item, idx) => (
+                          <tr key={item.sku || idx} className="hover:bg-rose-50/30 transition-colors">
+                            <td className="py-2.5 px-4">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-slate-700 text-xs">{item.name}</span>
+                                {item.variant && (
+                                  <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-md border border-slate-200">
+                                    {item.variant}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-4 text-right">
+                              <span className={`inline-flex items-center px-2 py-1 rounded-md text-[10px] font-black tracking-wide ${item.quantity === 0 ? 'bg-rose-100 text-rose-700' : 'bg-orange-100 text-orange-700'}`}>
+                                {item.quantity} units
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                ))}
+                </div>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Filter Row Controls */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+      {/* TABS */}
+      <div className="flex gap-3 mt-8 mb-2 border-b border-slate-100 pb-4 overflow-x-auto no-scrollbar">
+        <button 
+          onClick={() => { setActiveTab('products'); setViewingCategory(null); setSelectedCategory('All'); }}
+          className={`px-6 py-2.5 rounded-full text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'products' ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+        >
+          All Stock List
+        </button>
+        <button 
+          onClick={() => { setActiveTab('categories'); setViewingCategory(null); setSelectedCategory('All'); }}
+          className={`px-6 py-2.5 rounded-full text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'categories' ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+        >
+          Browse by Category
+        </button>
+      </div>
+
+      {activeTab === 'categories' && !viewingCategory ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mt-4 mb-8">
+          {categoryStats.map(stat => (
+            <div 
+              key={stat.name}
+              onClick={() => { setSelectedCategory(stat.name); setViewingCategory(stat.name); }}
+              className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm hover:shadow-lg transition-all cursor-pointer hover:border-emerald-200 group transform hover:-translate-y-1"
+            >
+              <div className="flex items-center gap-3 mb-5">
+                <div className="p-3 bg-emerald-50 rounded-2xl text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-all shadow-sm">
+                  <Tag className="w-6 h-6" />
+                </div>
+                <h3 className="font-extrabold text-slate-800 text-lg leading-tight truncate">{stat.name}</h3>
+              </div>
+              <div className="space-y-3 bg-slate-50/50 p-3 rounded-xl border border-slate-100/50">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-slate-500 font-semibold">Total Items</span>
+                  <span className="font-black text-slate-800 text-sm">{stat.count}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-slate-500 font-semibold">Total Value</span>
+                  <span className="font-black text-[#1e293b]">₹{stat.value.toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+      <>
+      {activeTab === 'categories' && viewingCategory && (
+        <div className="mb-2 mt-4 animate-fade-in">
+          <button onClick={() => { setViewingCategory(null); setSelectedCategory('All'); }} className="flex items-center text-sm font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 px-4 py-2 rounded-xl w-fit transition-all hover:bg-emerald-100">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Categories
+          </button>
+          <h2 className="text-xl font-black text-slate-800 mt-4 mb-2">{viewingCategory} Products</h2>
+        </div>
+      )}
+      {/* Action Bar (Filters & Search) */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex flex-wrap items-center justify-between gap-4 mt-4 mb-6">
+
         {/* Left Side Filters */}
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
           {/* Search SKU/Product */}
@@ -443,7 +579,7 @@ export const Inventory = () => {
             <input
               type="text"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={handleSearchChange}
               placeholder="Search by SKU or Product Name..."
               className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all duration-200"
             />
@@ -452,7 +588,7 @@ export const Inventory = () => {
           {/* Category Dropdown */}
           <select
             value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
+            onChange={handleCategoryChange}
             className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 font-bold focus:outline-none cursor-pointer"
           >
             {uniqueCategories.map(cat => (
@@ -463,7 +599,7 @@ export const Inventory = () => {
           {/* Warehouse Dropdown */}
           <select
             value={selectedWarehouse}
-            onChange={(e) => setSelectedWarehouse(e.target.value)}
+            onChange={handleWarehouseChange}
             className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 font-bold focus:outline-none cursor-pointer"
           >
             {uniqueWarehouses.map(wh => (
@@ -490,7 +626,7 @@ export const Inventory = () => {
             <span>Export</span>
           </button>
 
-          {/* Sync Products Button (replaces Add Item) */}
+          {/* Sync Products Button */}
           <button
             onClick={syncAndRefresh}
             disabled={syncing}
@@ -520,7 +656,7 @@ export const Inventory = () => {
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-750 font-semibold">
               {(() => {
-                if (filteredInventory.length === 0) {
+                if (paginatedItems.length === 0) {
                   return (
                     <tr>
                       <td colSpan="8" className="py-12 text-center text-slate-400 italic">
@@ -530,44 +666,10 @@ export const Inventory = () => {
                   );
                 }
 
-                // ── Group by product NAME so all variants appear under ONE product row ──
-                const grouped = {};
-                filteredInventory.forEach(item => {
-                  const key = item.name; // Use product name as the group key
-                  if (!grouped[key]) {
-                    grouped[key] = {
-                      groupKey: key,
-                      baseSku: item.baseSku || item.sku,
-                      name: item.name,
-                      category: item.category,
-                      warehouse: item.warehouse,
-                      totalQuantity: 0,
-                      totalValue: 0,
-                      mainItem: null,     // inventory item with NO variant (the plain product entry)
-                      variantItems: []    // inventory items WITH a variant set
-                    };
-                  }
-                  grouped[key].totalQuantity += item.quantity;
-                  grouped[key].totalValue += (item.quantity * item.unitPrice);
-
-                  if (item.variant && item.variant.trim() !== '') {
-                    grouped[key].variantItems.push(item);
-                  } else {
-                    // If multiple "main" items with same name exist, use the first one
-                    if (!grouped[key].mainItem) {
-                      grouped[key].mainItem = item;
-                    }
-                  }
-                });
-
-                return Object.values(grouped).map((group) => {
-                  const hasVariants = group.variantItems.length > 0;
-                  const isExpanded = expandedProducts[group.groupKey];
-                  const editTarget = group.mainItem || group.variantItems[0]; // item to edit for main row
-                  
-                  let groupStatus = 'In Stock';
-                  if (group.totalQuantity === 0) groupStatus = 'Out of Stock';
-                  else if (group.totalQuantity < 10) groupStatus = 'Low Stock';
+                return paginatedItems.map((item) => {
+                  let statusStr = 'In Stock';
+                  if (item.quantity === 0) statusStr = 'Out of Stock';
+                  else if (item.quantity < 10) statusStr = 'Low Stock';
 
                   const statusColors = (s) => ({
                     'In Stock': 'bg-emerald-50 text-emerald-700 border-emerald-100',
@@ -576,177 +678,70 @@ export const Inventory = () => {
                     'Dead Stock': 'bg-slate-50 text-slate-600 border-slate-200',
                   }[s] || 'bg-slate-50 text-slate-600 border-slate-200');
 
-                  // For delete: single item or group of all variants by name
-                  const deleteId = hasVariants
-                    ? `name:${group.name}` // delete ALL items with this product name
-                    : (editTarget ? editTarget.sku : null);
-
                   return (
-                    <React.Fragment key={group.groupKey}>
-                      {/* ═══ MAIN PRODUCT ROW ═══ */}
-                      <tr className={`hover:bg-slate-50/40 transition-colors ${isExpanded ? 'bg-emerald-50/20' : 'bg-white'}`}>
-                        {/* SKU */}
-                        <td className="py-3.5 px-6 text-slate-400 font-mono text-[11px] align-top">
-                          {group.baseSku}
-                        </td>
-
-                        {/* Product Name + Variants toggle button */}
-                        <td className="py-3.5 px-6 align-top">
-                          <div className="flex flex-col gap-1.5">
-                            <div className="flex items-center space-x-2">
-                              <Package className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                              <span className="text-[#1e293b] font-bold text-sm">{group.name}</span>
-                            </div>
-
-                            {/* Variants dropdown toggle — ONLY shown if product has variant items */}
-                            {hasVariants && (
-                              <button
-                                onClick={() => toggleExpand(group.groupKey)}
-                                className={`flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-lg border w-fit transition-all cursor-pointer ${
-                                  isExpanded
-                                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
-                                    : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                                }`}
-                              >
-                                <Tag className="w-3 h-3" />
-                                Variants ({group.variantItems.length})
-                                {isExpanded ? <ChevronUp className="w-3 h-3 ml-0.5" /> : <ChevronDown className="w-3 h-3 ml-0.5" />}
-                              </button>
-                            )}
+                    <tr key={item.sku} className="hover:bg-slate-50/40 transition-colors bg-white">
+                      <td className="py-3.5 px-6 text-slate-400 font-mono text-[11px] align-top">{item.sku}</td>
+                      <td className="py-3.5 px-6 align-top">
+                        <div className="flex flex-col gap-1.5">
+                          <div className="flex items-center space-x-2">
+                            <Package className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                            <span className="text-[#1e293b] font-bold text-sm">
+                              {item.name}
+                              {item.variant && <span className="ml-2 text-slate-500 font-normal text-xs bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">{item.variant}</span>}
+                            </span>
                           </div>
-                        </td>
-
-                        {/* Category */}
-                        <td className="py-3.5 px-6 text-slate-500 align-top">{group.category}</td>
-
-                        {/* Warehouse */}
-                        <td className="py-3.5 px-6 text-slate-500 font-medium align-top">
-                          {hasVariants ? <span className="text-slate-400 italic text-xs">Multiple</span> : group.warehouse}
-                        </td>
-
-                        {/* Total Quantity */}
-                        <td className="py-3.5 px-6 text-slate-800 font-extrabold text-sm align-top">
-                          {group.totalQuantity}
-                          {hasVariants && <span className="text-slate-400 font-normal text-[10px] block">total</span>}
-                        </td>
-
-                        {/* Total Value */}
-                        <td className="py-3.5 px-6 text-[#1e293b] font-extrabold align-top">
-                          ₹{group.totalValue.toLocaleString('en-IN')}
-                        </td>
-
-                        {/* Status */}
-                        <td className="py-3.5 px-6 align-top">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-lg text-[10px] font-bold tracking-wide border ${statusColors(groupStatus)}`}>
-                            {groupStatus}
-                          </span>
-                        </td>
-
-                        {/* Actions — ALWAYS on main row */}
-                        <td className="py-3.5 px-6 text-right pr-6 align-top">
-                          {editTarget && (
-                            <div className="flex items-center justify-end space-x-2">
-                              <button
-                                onClick={() => openEditModal(editTarget)}
-                                className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
-                                title="Edit"
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => deleteId && setDeleteConfirmId(deleteId)}
-                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
-                                title={hasVariants ? 'Delete All' : 'Delete'}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-
-                      {/* ═══ VARIANT ROWS (expanded dropdown) ═══ */}
-                      {isExpanded && hasVariants && (
-                        <>
-                          {/* Variant header banner */}
-                          <tr className="bg-emerald-50/50">
-                            <td colSpan="8" className="px-6 py-1.5 border-t border-emerald-100">
-                              <span className="text-[10px] font-extrabold text-emerald-700 uppercase tracking-widest">
-                                ▾ Variants of {group.name}
-                              </span>
-                            </td>
-                          </tr>
-
-                          {/* One row per variant */}
-                          {group.variantItems.map((vItem, vi) => (
-                            <tr
-                              key={vItem.sku}
-                              className={`bg-slate-50/50 hover:bg-emerald-50/20 transition-colors ${
-                                vi < group.variantItems.length - 1 ? 'border-b border-slate-100' : 'border-b-2 border-emerald-100'
-                              }`}
-                            >
-                              {/* Variant SKU */}
-                              <td className="py-2.5 pl-10 pr-4 text-slate-400 font-mono text-[10px]">
-                                └ {vItem.sku}
-                              </td>
-
-                              {/* Variant label pill */}
-                              <td className="py-2.5 px-6">
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-emerald-200 text-slate-700 text-[11px] font-bold rounded-lg shadow-sm">
-                                  <Tag className="w-3 h-3 text-emerald-500" />
-                                  {vItem.variant}
-                                </span>
-                              </td>
-
-                              <td className="py-2.5 px-6 text-slate-400 text-xs">{group.category}</td>
-                              <td className="py-2.5 px-6 text-slate-500 text-xs">{vItem.warehouse}</td>
-
-                              {/* Variant Qty */}
-                              <td className="py-2.5 px-6 text-slate-800 font-bold text-sm">{vItem.quantity}</td>
-
-                              {/* Variant Value */}
-                              <td className="py-2.5 px-6 text-slate-700 font-bold text-xs">
-                                ₹{(vItem.quantity * vItem.unitPrice).toLocaleString('en-IN')}
-                              </td>
-
-                              {/* Variant Status */}
-                              <td className="py-2.5 px-6">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold border ${statusColors(vItem.status)}`}>
-                                  {vItem.status}
-                                </span>
-                              </td>
-
-                              {/* Variant Actions — Edit + Delete */}
-                              <td className="py-2.5 px-6 text-right pr-6">
-                                <div className="flex items-center justify-end space-x-1.5">
-                                  <button
-                                    onClick={() => openEditModal(vItem)}
-                                    className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
-                                    title="Edit Variant Stock"
-                                  >
-                                    <Pencil className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    onClick={() => setDeleteConfirmId(vItem.sku)}
-                                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
-                                    title="Delete Variant"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </>
-                      )}
-                    </React.Fragment>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-6 text-slate-500 align-top">{item.category}</td>
+                      <td className="py-3.5 px-6 text-slate-500 font-medium align-top">{item.warehouse}</td>
+                      <td className="py-3.5 px-6 text-slate-800 font-extrabold text-sm align-top">{item.quantity}</td>
+                      <td className="py-3.5 px-6 text-[#1e293b] font-extrabold align-top">₹{(item.quantity * item.unitPrice).toLocaleString('en-IN')}</td>
+                      <td className="py-3.5 px-6 align-top">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-lg text-[10px] font-bold tracking-wide border ${statusColors(statusStr)}`}>
+                          {statusStr}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-6 text-right pr-6 align-top">
+                        <div className="flex items-center justify-end space-x-2">
+                          <button onClick={() => openEditModal(item)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => setDeleteConfirmId(item.sku)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
                   );
                 });
               })()}
             </tbody>
           </table>
         </div>
+        <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between bg-white rounded-b-2xl">
+          <span className="text-xs font-semibold text-slate-500">
+            Page {currentPage} of {computedTotalPages}
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => setCurrentPage(p => Math.min(computedTotalPages, p + 1))}
+              disabled={currentPage === computedTotalPages}
+              className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
+        </div>
       </div>
+      </>
+      )}
 
       {/* Add / Edit Inventory Item Portal Modal */}
       {isModalOpen && createPortal(
