@@ -13,9 +13,8 @@ export const Settings = () => {
     state: '',
     telephone: '',
     email: '',
-    bankName: '',
-    accountNumber: '',
-    branchIfsc: '',
+    gstNumber: '',
+    logo: '',
     termsAndConditions: '',
     notes: ''
   });
@@ -34,9 +33,8 @@ export const Settings = () => {
           state: data.state || '',
           telephone: data.telephone || '',
           email: data.email || '',
-          bankName: data.bankName || '',
-          accountNumber: data.accountNumber || '',
-          branchIfsc: data.branchIfsc || '',
+          gstNumber: data.gstNumber || '',
+          logo: data.logo || '',
           termsAndConditions: data.termsAndConditions || '',
           notes: data.notes || ''
         });
@@ -49,6 +47,21 @@ export const Settings = () => {
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleLogoUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        showToast('Logo size should be less than 2MB', 'error');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData(prev => ({ ...prev, logo: reader.result }));
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleSave = async () => {
@@ -112,6 +125,36 @@ export const Settings = () => {
               </div>
             </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={labelClass}>GST Number</label>
+                  <input type="text" name="gstNumber" value={formData.gstNumber} onChange={handleChange} placeholder="22AAAAA0000A1Z5" className={inputClass} />
+                </div>
+              </div>
+
+              <div>
+                <label className={labelClass}>Company Logo</label>
+                <div className="flex items-center gap-4">
+                  {formData.logo && (
+                    <div className="w-16 h-16 rounded-xl border border-slate-200 overflow-hidden bg-white flex items-center justify-center shrink-0">
+                      <img src={formData.logo} alt="Company Logo" className="max-w-full max-h-full object-contain" />
+                    </div>
+                  )}
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={handleLogoUpload} 
+                    className="block w-full text-sm text-slate-500
+                      file:mr-4 file:py-2 file:px-4
+                      file:rounded-full file:border-0
+                      file:text-xs file:font-semibold
+                      file:bg-emerald-50 file:text-emerald-700
+                      hover:file:bg-emerald-100 cursor-pointer transition-all"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">Recommended size: 250x100px. Max 2MB.</p>
+              </div>
+
             <div className="grid grid-cols-1 gap-4">
               <div>
                 <label className={labelClass}>State</label>
@@ -127,32 +170,6 @@ export const Settings = () => {
         </div>
 
         <div className="space-y-6">
-          {/* Bank Details */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-5">
-            <div className="flex items-center space-x-2 border-b border-slate-50 pb-2">
-              <Landmark className="w-5 h-5 text-emerald-600" />
-              <h3 className="font-bold text-slate-800 text-base">Bank Details</h3>
-            </div>
-            
-            <div className="space-y-4">
-              <div>
-                <label className={labelClass}>Bank Name</label>
-                <input type="text" name="bankName" value={formData.bankName} onChange={handleChange} placeholder="HDFC Bank" className={inputClass} />
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className={labelClass}>Account Number</label>
-                  <input type="text" name="accountNumber" value={formData.accountNumber} onChange={handleChange} placeholder="XXXXXXXXXXXX" className={inputClass} />
-                </div>
-                <div>
-                  <label className={labelClass}>Branch & IFSC Code</label>
-                  <input type="text" name="branchIfsc" value={formData.branchIfsc} onChange={handleChange} placeholder="HDFC0001234" className={inputClass} />
-                </div>
-              </div>
-            </div>
-          </div>
-
           {/* Invoice Defaults */}
           <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-5">
             <div className="flex items-center space-x-2 border-b border-slate-50 pb-2">

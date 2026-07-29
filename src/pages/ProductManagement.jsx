@@ -64,7 +64,8 @@ export const ProductManagement = () => {
     wholesalePrice: '',
     retailPrice: '',
     status: 'Active',
-    image: ''
+    image: '',
+    srNo: ''
   });
 
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -203,7 +204,8 @@ export const ProductManagement = () => {
         qty: parseInt(newProduct.qty) || 0,
         wholesalePrice: parseFloat(newProduct.wholesalePrice) || 0,
         retailPrice: parseFloat(newProduct.retailPrice) || 0,
-        status: newProduct.status
+        status: newProduct.status,
+        srNo: newProduct.srNo ? parseInt(newProduct.srNo) : 999999
       };
 
       if (modalType === 'add') {
@@ -261,7 +263,8 @@ export const ProductManagement = () => {
       wholesalePrice: '',
       retailPrice: '',
       status: 'Active',
-      image: ''
+      image: '',
+      srNo: ''
     });
   };
 
@@ -276,6 +279,7 @@ export const ProductManagement = () => {
       ...product,
       id: product.id,
       _id: product._id || product.id,
+      srNo: product.srNo === 999999 ? '' : product.srNo,
     });
     setModalType(type); // 'edit' or 'view'
     setIsModalOpen(true);
@@ -330,6 +334,42 @@ export const ProductManagement = () => {
   // We already fetched filtered and paginated data from the server.
   // We can just use the products list as is for currentProducts.
   const currentProducts = products;
+
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxVisiblePages = 5;
+
+    if (totalPages <= maxVisiblePages + 2) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      
+      let startPage = Math.max(2, currentPage - 2);
+      let endPage = Math.min(totalPages - 1, currentPage + 2);
+      
+      if (currentPage <= 3) {
+        endPage = 5;
+      } else if (currentPage >= totalPages - 2) {
+        startPage = totalPages - 4;
+      }
+
+      if (startPage > 2) {
+        pages.push('...');
+      }
+
+      for (let i = startPage; i <= endPage; i++) {
+        pages.push(i);
+      }
+
+      if (endPage < totalPages - 1) {
+        pages.push('...');
+      }
+
+      pages.push(totalPages);
+    }
+
+    return pages;
+  };
 
   return (
     <div className="space-y-6 animate-fade-in pb-12 relative">
@@ -485,6 +525,12 @@ export const ProductManagement = () => {
                 </th>
                 <th className="py-3.5 px-4">
                   <div className="flex items-center space-x-1 cursor-pointer select-none">
+                    <span>SR. NO.</span>
+                    <ChevronsUpDown className="w-3 h-3 text-slate-400" />
+                  </div>
+                </th>
+                <th className="py-3.5 px-4">
+                  <div className="flex items-center space-x-1 cursor-pointer select-none">
                     <span>IMAGE</span>
                     <ChevronsUpDown className="w-3 h-3 text-slate-400" />
                   </div>
@@ -552,6 +598,11 @@ export const ProductManagement = () => {
                         onChange={() => handleSelectProduct(product.id)}
                         className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                       />
+                    </td>
+
+                    {/* Sr No */}
+                    <td className="py-3.5 px-4 font-bold text-slate-800">
+                      {product.srNo === 999999 ? '—' : product.srNo}
                     </td>
 
                     {/* Image */}
@@ -725,17 +776,21 @@ export const ProductManagement = () => {
             </button>
 
             {/* Page Buttons */}
-            {Array.from({ length: totalPages }).map((_, i) => (
-              <button
-                key={i + 1}
-                onClick={() => setCurrentPage(i + 1)}
-                className={`w-8 h-8 rounded-lg text-xs font-extrabold transition-all cursor-pointer border ${currentPage === i + 1
-                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-500/10'
-                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                  }`}
-              >
-                {i + 1}
-              </button>
+            {getPageNumbers().map((page, index) => (
+              page === '...' ? (
+                <span key={`ellipsis-${index}`} className="px-2 text-slate-400 font-bold">...</span>
+              ) : (
+                <button
+                  key={`page-${page}`}
+                  onClick={() => setCurrentPage(page)}
+                  className={`w-8 h-8 rounded-lg text-xs font-extrabold transition-all cursor-pointer border ${currentPage === page
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-500/10'
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                >
+                  {page}
+                </button>
+              )
             ))}
 
             {/* Next Button */}
@@ -806,6 +861,19 @@ export const ProductManagement = () => {
                       <img src={newProduct.image.startsWith('/') ? `${BASE_URL}${newProduct.image}` : newProduct.image} alt="Preview" className="w-full h-full object-cover" onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; }} />
                     </div>
                   )}
+                </div>
+
+                {/* Sr No */}
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Sr. No.</label>
+                  <input
+                    type="number"
+                    disabled={modalType === 'view'}
+                    value={newProduct.srNo}
+                    onChange={(e) => setNewProduct({ ...newProduct, srNo: e.target.value })}
+                    placeholder="e.g. 1"
+                    className={`w-full px-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all ${modalType === 'view' ? 'opacity-70 cursor-not-allowed' : ''}`}
+                  />
                 </div>
 
                 {/* Product Name */}

@@ -11,7 +11,19 @@ import {
 const ProductSearch = ({ item, productList, onSelect, onChange }) => {
   const [search, setSearch] = useState(item.product || '');
   const [isOpen, setIsOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const wrapperRef = useRef(null);
+
+  useEffect(() => {
+    setHighlightedIndex(-1);
+  }, [search]);
+
+  useEffect(() => {
+    if (highlightedIndex >= 0) {
+      const el = document.getElementById(`product-item-${item.id}-${highlightedIndex}`);
+      if (el) el.scrollIntoView({ block: 'nearest' });
+    }
+  }, [highlightedIndex, item.id]);
 
   useEffect(() => {
     if (item.product !== search) {
@@ -31,6 +43,27 @@ const ProductSearch = ({ item, productList, onSelect, onChange }) => {
 
   const filtered = productList.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || (p.sku && p.sku.toLowerCase().includes(search.toLowerCase())));
 
+  const handleKeyDown = (e) => {
+    if (!isOpen) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIndex(prev => Math.min(prev + 1, filtered.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex(prev => Math.max(prev - 1, -1));
+    } else if (e.key === 'Enter' && highlightedIndex >= 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      const selectedProduct = filtered[highlightedIndex];
+      if (selectedProduct) {
+        onSelect(selectedProduct.name);
+        setSearch(selectedProduct.name);
+        setIsOpen(false);
+      }
+    }
+  };
+
   return (
     <div className="relative" ref={wrapperRef}>
       <div className="relative">
@@ -44,6 +77,7 @@ const ProductSearch = ({ item, productList, onSelect, onChange }) => {
             setIsOpen(true);
           }}
           onFocus={() => setIsOpen(true)}
+          onKeyDown={handleKeyDown}
           placeholder="Search Product..."
           className="w-full pl-8 pr-3 py-2 bg-slate-50/50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 cursor-text font-bold text-slate-700 text-xs"
         />
@@ -55,15 +89,16 @@ const ProductSearch = ({ item, productList, onSelect, onChange }) => {
       </div>
       {isOpen && search && filtered.length > 0 && (
         <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
-          {filtered.map(p => (
+          {filtered.map((p, index) => (
             <div
               key={p._id}
+              id={`product-item-${item.id}-${index}`}
               onClick={() => {
                 onSelect(p.name);
                 setSearch(p.name);
                 setIsOpen(false);
               }}
-              className="px-3 py-2 cursor-pointer hover:bg-emerald-50 border-b border-slate-50 last:border-0"
+              className={`px-3 py-2 cursor-pointer border-b border-slate-50 last:border-0 ${highlightedIndex === index ? 'bg-emerald-100' : 'hover:bg-emerald-50'}`}
             >
               <div className="text-xs font-bold text-slate-800">{p.name}</div>
               {p.sku && <div className="text-[10px] text-slate-400">SKU: {p.sku}</div>}
@@ -85,7 +120,7 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
   const [customerSearchResults, setCustomerSearchResults] = useState([]);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
-  const [customerType, setCustomerType] = useState('retail');
+  const [customerHighlightedIndex, setCustomerHighlightedIndex] = useState(-1);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerCompany, setCustomerCompany] = useState('');
@@ -141,11 +176,48 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
 
   // ── Customer live search ───────────────────────────────────
   useEffect(() => {
+    setCustomerHighlightedIndex(-1);
     const q = customerSearchQuery.trim();
     if (!q) { setCustomerSearchResults([]); return; }
     const results = crmService.searchCustomers(customers, q).slice(0, 6);
     setCustomerSearchResults(results);
   }, [customerSearchQuery, customers]);
+
+  useEffect(() => {
+    if (customerHighlightedIndex >= 0) {
+      const el = document.getElementById(`customer-item-${customerHighlightedIndex}`);
+      if (el) el.scrollIntoView({ block: 'nearest' });
+    }
+  }, [customerHighlightedIndex]);
+
+  const handleCustomerKeyDown = (e) => {
+    if (!showCustomerDropdown) return;
+
+    const actualMaxIndex = customerSearchResults.length > 0 ? customerSearchResults.length : 0; 
+    
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setCustomerHighlightedIndex(prev => Math.min(prev + 1, actualMaxIndex));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setCustomerHighlightedIndex(prev => Math.max(prev - 1, -1));
+    } else if (e.key === 'Enter' && customerHighlightedIndex >= 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      if (customerSearchResults.length > 0) {
+        if (customerHighlightedIndex < customerSearchResults.length) {
+          fillCustomerFields(customerSearchResults[customerHighlightedIndex]);
+        } else {
+          setShowCustomerDropdown(false);
+          setCustomerName(customerSearchQuery);
+        }
+      } else {
+        setShowCustomerDropdown(false);
+        setCustomerName(customerSearchQuery);
+      }
+    }
+  };
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -204,13 +276,21 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
       .catch(() => {});
   }, []);
 
-  // ── Fetch next invoice ID & all invoices ───────────────────
   useEffect(() => {
     api.get('/invoices').then(invs => {
       if (Array.isArray(invs)) {
         setAllInvoices(invs);
         if (!isEditingDraft) {
-          setInvoiceId(`INV-2026-${String(invs.length + 1).padStart(3, '0')}`);
+          let maxId = 0;
+          invs.forEach(inv => {
+            const match = inv.invoiceId?.match(/INV-\d{4}-(\d+)/) || inv.id?.match(/INV-\d{4}-(\d+)/);
+            if (match) {
+              const num = parseInt(match[1], 10);
+              if (num > maxId) maxId = num;
+            }
+          });
+          const year = new Date().getFullYear();
+          setInvoiceId(`INV-${year}-${String(maxId + 1).padStart(3, '0')}`);
         }
       }
     }).catch(() => {
@@ -293,28 +373,12 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
         const found = productList.find(p => p.name === item.product);
         if (found?.variantDetails) {
           const vd = found.variantDetails.find(v => v.variantName === value);
-          if (vd) update.price = customerType === 'wholesale' ? vd.wholesalePrice : vd.retailPrice;
+          if (vd) update.price = vd.retailPrice;
         }
       }
       return { ...item, ...update };
     }));
   };
-
-  // When customer type changes, re-price items
-  useEffect(() => {
-    setItems(prev => prev.map(item => {
-      if (!item.product) return item;
-      const found = productList.find(p => p.name === item.product);
-      if (!found) return item;
-      let price = customerType === 'wholesale' ? found.wholesalePrice : found.retailPrice;
-      if (item.variant && found.variantDetails) {
-        const vd = found.variantDetails.find(v => v.variantName === item.variant);
-        if (vd) price = customerType === 'wholesale' ? vd.wholesalePrice : vd.retailPrice;
-      }
-      return { ...item, price };
-    }));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customerType, productList]);
 
   const handleProductSelect = async (id, productName) => {
     const found = productList.find(p => p.name === productName);
@@ -327,13 +391,13 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
         if (pricing) {
           price = pricing.lastPrice;
         } else if (found) {
-          price = customerType === 'wholesale' ? found.wholesalePrice : found.retailPrice;
+          price = found.retailPrice;
         }
       } catch (e) {
-        if (found) price = customerType === 'wholesale' ? found.wholesalePrice : found.retailPrice;
+        if (found) price = found.retailPrice;
       }
     } else if (found) {
-      price = customerType === 'wholesale' ? found.wholesalePrice : found.retailPrice;
+      price = found.retailPrice;
     }
 
     setItems(items.map(item => item.id === id ? { ...item, product: productName, variant: '', price } : item));
@@ -391,7 +455,7 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
       paymentStatus: overrideStatus === 'Draft' ? 'Draft' : paymentStatus,
       paymentMethod,
       notes: notes.trim(),
-      customerType,
+      customerType: 'retail',
       invoiceType: invoiceType.trim(),
       documentNumber: documentNumber.trim(),
     };
@@ -426,6 +490,47 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
     window.addEventListener('beforeunload', h);
     return () => window.removeEventListener('beforeunload', h);
   });
+
+  // Handle Enter as Tab for easy navigation
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Enter') {
+        const activeElement = document.activeElement;
+        
+        // Don't intercept Enter on textareas (so user can insert newlines)
+        // or on buttons (so user can click them with Enter)
+        if (
+          activeElement.tagName === 'TEXTAREA' ||
+          activeElement.tagName === 'BUTTON'
+        ) {
+          return;
+        }
+
+        e.preventDefault();
+        
+        // Find all focusable elements
+        const focusableElements = Array.from(
+          document.querySelectorAll(
+            'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          )
+        );
+        
+        const index = focusableElements.indexOf(activeElement);
+        // Find next focusable element that is actually visible (offsetParent !== null checks visibility)
+        let nextIndex = index + 1;
+        while (nextIndex < focusableElements.length) {
+          if (focusableElements[nextIndex].offsetParent !== null) {
+            focusableElements[nextIndex].focus();
+            break;
+          }
+          nextIndex++;
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const inputClass = "w-full px-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all";
 
@@ -492,14 +597,6 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
           <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-5">
             <div className="flex justify-between items-center pb-2 border-b border-slate-50">
               <h3 className="font-bold text-slate-800 text-base">Customer Details</h3>
-              <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200/40">
-                {['retail', 'wholesale'].map(t => (
-                  <button key={t} type="button" onClick={() => setCustomerType(t)}
-                    className={`px-4 py-1 text-xs font-bold rounded-md transition-all cursor-pointer capitalize ${customerType === t ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
-                    {t}
-                  </button>
-                ))}
-              </div>
             </div>
 
             {/* ── Smart Customer Search ── */}
@@ -515,6 +612,7 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
                   value={customerSearchQuery}
                   onChange={e => { setCustomerSearchQuery(e.target.value); setShowCustomerDropdown(true); }}
                   onFocus={() => setShowCustomerDropdown(true)}
+                  onKeyDown={handleCustomerKeyDown}
                   placeholder="Search by name, mobile, GST, company..."
                   className="w-full pl-9 pr-10 py-2.5 bg-emerald-50/50 border border-emerald-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
                 />
@@ -527,12 +625,12 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
 
                 {/* Dropdown */}
                 {showCustomerDropdown && (customerSearchResults.length > 0 || customerSearchQuery.length > 1) && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden">
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-y-auto max-h-64">
                     {customerSearchResults.length > 0 ? (
                       <>
-                        {customerSearchResults.map(c => (
-                          <button key={c.id} onClick={() => fillCustomerFields(c)}
-                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-emerald-50 transition-colors cursor-pointer text-left border-b border-slate-50 last:border-0">
+                        {customerSearchResults.map((c, index) => (
+                          <button key={c.id} id={`customer-item-${index}`} onClick={() => fillCustomerFields(c)}
+                            className={`w-full flex items-center gap-3 px-4 py-3 transition-colors cursor-pointer text-left border-b border-slate-50 last:border-0 ${customerHighlightedIndex === index ? 'bg-emerald-100' : 'hover:bg-emerald-50'}`}>
                             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white text-xs font-black flex-shrink-0">
                               {c.name.charAt(0)}
                             </div>
@@ -544,8 +642,8 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
                           </button>
                         ))}
                         <div className="border-t border-slate-100">
-                          <button onClick={() => { setShowCustomerDropdown(false); setCustomerName(customerSearchQuery); }}
-                            className="w-full flex items-center gap-2 px-4 py-3 text-xs font-bold text-emerald-700 hover:bg-emerald-50 cursor-pointer transition-colors">
+                          <button id={`customer-item-${customerSearchResults.length}`} onClick={() => { setShowCustomerDropdown(false); setCustomerName(customerSearchQuery); }}
+                            className={`w-full flex items-center gap-2 px-4 py-3 text-xs font-bold text-emerald-700 cursor-pointer transition-colors ${customerHighlightedIndex === customerSearchResults.length ? 'bg-emerald-100' : 'hover:bg-emerald-50'}`}>
                             <Plus className="w-3.5 h-3.5" /> Continue as new customer
                           </button>
                         </div>
@@ -553,8 +651,8 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
                     ) : (
                       <div className="px-4 py-4">
                         <p className="text-xs text-slate-500 font-medium mb-2">No customers found for "{customerSearchQuery}"</p>
-                        <button onClick={() => { setShowCustomerDropdown(false); setCustomerName(customerSearchQuery); }}
-                          className="w-full flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-700 cursor-pointer hover:bg-emerald-100 transition-colors">
+                        <button id={`customer-item-0`} onClick={() => { setShowCustomerDropdown(false); setCustomerName(customerSearchQuery); }}
+                          className={`w-full flex items-center gap-2 px-3 py-2 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-700 cursor-pointer transition-colors ${customerHighlightedIndex === 0 ? 'bg-emerald-100' : 'bg-emerald-50 hover:bg-emerald-100'}`}>
                           <Plus className="w-3.5 h-3.5" /> Add as new customer after invoice
                         </button>
                       </div>

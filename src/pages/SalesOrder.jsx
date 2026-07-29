@@ -285,9 +285,8 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
     const compAddress = cs.address || '';
     const compState = cs.state || '';
     const compPhone = cs.telephone || '';
-    const bankName = cs.bankName || '';
-    const accountNo = cs.accountNumber || '';
-    const ifsc = cs.branchIfsc || '';
+    const gstNumber = cs.gstNumber || '';
+    const logo = cs.logo || '';
     const terms = cs.termsAndConditions || '*(1) Payment should be made as per terms of payment.\n(2) Goods once sold will not be taken back.';
     const notes = cs.notes || 'Thank You For Your Business.';
 
@@ -336,6 +335,7 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
       flex-direction: column;
     }
     .top-header { display: flex; justify-content: space-between; margin-bottom: 5px; }
+    .company-logo { max-height: 60px; max-width: 150px; margin-bottom: 10px; }
     .company-name { font-size: 18px; font-weight: bold; }
     .company-addr { font-size: 12px; margin-top: 2px; }
     .state-tel { text-align: right; font-weight: bold; font-size: 12px; }
@@ -379,12 +379,14 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
   <!-- Header -->
   <div class="top-header">
     <div>
+      ${logo ? `<img src="${logo}" class="company-logo" />` : ''}
       <div class="company-name">${compName}</div>
       <div class="company-addr">${compAddress.replace(/\\n/g, '<br/>')}</div>
     </div>
     <div class="state-tel">
       <div>State : ${compState}</div>
       <div>Tel : ${compPhone}</div>
+      ${gstNumber ? `<div style="margin-top: 4px;">GSTIN : ${gstNumber}</div>` : ''}
     </div>
   </div>
 
@@ -487,15 +489,8 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
           <div style="font-size: 11px;">${formattedNotes}</div>
         </div>
       </td>
-      <td style="width: 50%; padding-left: 10px;">
-        <div style="font-weight: bold; font-size: 11px; margin-bottom: 5px;">Company's Bank Details</div>
-        <table style="width: 100%; font-size: 11px;">
-          <tr><td style="width: 100px;">Bank Name</td><td>: ${bankName}</td></tr>
-          <tr><td>A/C No.</td><td>: ${accountNo}</td></tr>
-          <tr><td>Branch & IFS Code</td><td>: ${ifsc}</td></tr>
-        </table>
-
-        <div class="sign-box">
+      <td style="width: 50%; padding-left: 10px; display: flex; flex-direction: column; justify-content: flex-end;">
+        <div class="sign-box" style="margin-top: auto;">
           <div style="margin-bottom: 40px; font-weight: normal;">For ${compName}</div>
           <div>Authorised Signatory</div>
         </div>

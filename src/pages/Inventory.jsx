@@ -43,6 +43,10 @@ export const Inventory = () => {
   const [activeTab, setActiveTab] = useState('products');
   const [viewingCategory, setViewingCategory] = useState(null);
 
+  const [isReorderingCategories, setIsReorderingCategories] = useState(false);
+  const [localCategories, setLocalCategories] = useState([]);
+  const [draggedCatIdx, setDraggedCatIdx] = useState(null);
+
   const [metrics, setMetrics] = useState({
     totalInventoryValue: 0,
     totalItemsInStock: 0,
@@ -153,6 +157,50 @@ export const Inventory = () => {
   // Derived Summary Metrics from Backend
   const { totalInventoryValue, totalItemsInStock, lowStockAlerts, deadStockItems, uniqueCategories, uniqueWarehouses, lowStockItems, categoryStats = [] } = metrics;
 
+  useEffect(() => {
+    if (categoryStats.length > 0) {
+      const savedOrder = JSON.parse(localStorage.getItem('categoryOrder')) || [];
+      const sorted = [...categoryStats].sort((a, b) => {
+        const indexA = savedOrder.indexOf(a.name);
+        const indexB = savedOrder.indexOf(b.name);
+        if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+        if (indexA !== -1) return -1;
+        if (indexB !== -1) return 1;
+        return a.name.localeCompare(b.name);
+      });
+      setLocalCategories(sorted);
+    }
+  }, [categoryStats]);
+
+  const handleDragStart = (e, index) => {
+    setDraggedCatIdx(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    if (draggedCatIdx === null || draggedCatIdx === index) return;
+    
+    const newItems = [...localCategories];
+    const draggedItem = newItems[draggedCatIdx];
+    newItems.splice(draggedCatIdx, 1);
+    newItems.splice(index, 0, draggedItem);
+    
+    setDraggedCatIdx(index);
+    setLocalCategories(newItems);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedCatIdx(null);
+  };
+
+  const saveCategoryOrder = () => {
+    const order = localCategories.map(c => c.name);
+    localStorage.setItem('categoryOrder', JSON.stringify(order));
+    setIsReorderingCategories(false);
+    showToast('Category positions saved successfully!', 'success');
+  };
+
   // Search and Double Filters (Already handled by backend, but we map it directly)
   const filteredInventory = inventory;
 
@@ -162,6 +210,33 @@ export const Inventory = () => {
     const start = (currentPage - 1) * limit;
     return filteredInventory.slice(start, start + limit);
   }, [filteredInventory, currentPage, limit]);
+
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxVisiblePages = 5;
+
+    if (computedTotalPages <= maxVisiblePages + 2) {
+      for (let i = 1; i <= computedTotalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      
+      let startPage = Math.max(2, currentPage - 2);
+      let endPage = Math.min(computedTotalPages - 1, currentPage + 2);
+      
+      if (currentPage <= 3) {
+        endPage = 5;
+      } else if (currentPage >= computedTotalPages - 2) {
+        startPage = computedTotalPages - 4;
+      }
+
+      if (startPage > 2) pages.push('...');
+      for (let i = startPage; i <= endPage; i++) pages.push(i);
+      if (endPage < computedTotalPages - 1) pages.push('...');
+      
+      pages.push(computedTotalPages);
+    }
+    return pages;
+  };
 
   // Ensure currentPage doesn't exceed computedTotalPages
   useEffect(() => {
@@ -515,31 +590,62 @@ export const Inventory = () => {
       )}
 
       {/* TABS */}
-      <div className="flex gap-3 mt-8 mb-2 border-b border-slate-100 pb-4 overflow-x-auto no-scrollbar">
-        <button 
-          onClick={() => { setActiveTab('products'); setViewingCategory(null); setSelectedCategory('All'); }}
-          className={`px-6 py-2.5 rounded-full text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'products' ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}
-        >
-          All Stock List
-        </button>
-        <button 
-          onClick={() => { setActiveTab('categories'); setViewingCategory(null); setSelectedCategory('All'); }}
-          className={`px-6 py-2.5 rounded-full text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'categories' ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}
-        >
-          Browse by Category
-        </button>
+      <div className="flex justify-between items-center mt-8 mb-2 border-b border-slate-100 pb-4 overflow-x-auto no-scrollbar gap-4">
+        <div className="flex gap-3">
+          <button 
+            onClick={() => { setActiveTab('products'); setViewingCategory(null); setSelectedCategory('All'); setIsReorderingCategories(false); }}
+            className={`px-6 py-2.5 rounded-full text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'products' ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+          >
+            All Stock List
+          </button>
+          <button 
+            onClick={() => { setActiveTab('categories'); setViewingCategory(null); setSelectedCategory('All'); }}
+            className={`px-6 py-2.5 rounded-full text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'categories' ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+          >
+            Browse by Category
+          </button>
+        </div>
+
+        {activeTab === 'categories' && !viewingCategory && (
+          <div className="flex items-center">
+            {isReorderingCategories ? (
+              <button 
+                onClick={saveCategoryOrder}
+                className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg shadow-md hover:bg-emerald-700 transition-all flex items-center gap-1.5 whitespace-nowrap"
+              >
+                <CheckCircle className="w-4 h-4" /> Save Positions
+              </button>
+            ) : (
+              <button 
+                onClick={() => setIsReorderingCategories(true)}
+                className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-xs font-bold rounded-lg shadow-sm hover:bg-slate-50 transition-all flex items-center gap-1.5 whitespace-nowrap"
+              >
+                <TrendingUp className="w-4 h-4" /> Edit Positions
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {activeTab === 'categories' && !viewingCategory ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mt-4 mb-8">
-          {categoryStats.map(stat => (
+          {localCategories.map((stat, idx) => (
             <div 
               key={stat.name}
-              onClick={() => { setSelectedCategory(stat.name); setViewingCategory(stat.name); }}
-              className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm hover:shadow-lg transition-all cursor-pointer hover:border-emerald-200 group transform hover:-translate-y-1"
+              draggable={isReorderingCategories}
+              onDragStart={(e) => handleDragStart(e, idx)}
+              onDragOver={(e) => handleDragOver(e, idx)}
+              onDragEnd={handleDragEnd}
+              onClick={() => {
+                if (!isReorderingCategories) {
+                  setSelectedCategory(stat.name);
+                  setViewingCategory(stat.name);
+                }
+              }}
+              className={`bg-white rounded-2xl border ${isReorderingCategories ? 'border-dashed border-emerald-400 cursor-move shadow-md opacity-90' : 'border-slate-100 cursor-pointer shadow-sm hover:shadow-lg hover:border-emerald-200 group transform hover:-translate-y-1'} p-6 transition-all`}
             >
               <div className="flex items-center gap-3 mb-5">
-                <div className="p-3 bg-emerald-50 rounded-2xl text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-all shadow-sm">
+                <div className={`p-3 rounded-2xl shadow-sm transition-all ${isReorderingCategories ? 'bg-emerald-100 text-emerald-600' : 'bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white'}`}>
                   <Tag className="w-6 h-6" />
                 </div>
                 <h3 className="font-extrabold text-slate-800 text-lg leading-tight truncate">{stat.name}</h3>
@@ -554,6 +660,11 @@ export const Inventory = () => {
                   <span className="font-black text-[#1e293b]">₹{stat.value.toLocaleString('en-IN')}</span>
                 </div>
               </div>
+              {isReorderingCategories && (
+                <div className="mt-4 text-center text-[10px] font-bold text-emerald-500">
+                  Drag to move
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -644,6 +755,7 @@ export const Inventory = () => {
           <table className="w-full text-left text-xs min-w-[950px]">
             <thead>
               <tr className="bg-slate-50/70 border-b border-slate-100 text-slate-450 font-bold uppercase tracking-wider">
+                <th className="py-3.5 px-6">Sr. No.</th>
                 <th className="py-3.5 px-6">SKU</th>
                 <th className="py-3.5 px-6">Product Name</th>
                 <th className="py-3.5 px-6">Category</th>
@@ -659,7 +771,7 @@ export const Inventory = () => {
                 if (paginatedItems.length === 0) {
                   return (
                     <tr>
-                      <td colSpan="8" className="py-12 text-center text-slate-400 italic">
+                      <td colSpan="9" className="py-12 text-center text-slate-400 italic">
                         No matching stock items found
                       </td>
                     </tr>
@@ -680,6 +792,7 @@ export const Inventory = () => {
 
                   return (
                     <tr key={item.sku} className="hover:bg-slate-50/40 transition-colors bg-white">
+                      <td className="py-3.5 px-6 font-bold text-slate-800 align-top">{item.srNo === 999999 ? '—' : (item.srNo || '—')}</td>
                       <td className="py-3.5 px-6 text-slate-400 font-mono text-[11px] align-top">{item.sku}</td>
                       <td className="py-3.5 px-6 align-top">
                         <div className="flex flex-col gap-1.5">
@@ -722,18 +835,36 @@ export const Inventory = () => {
           <span className="text-xs font-semibold text-slate-500">
             Page {currentPage} of {computedTotalPages}
           </span>
-          <div className="flex gap-2">
+          <div className="flex items-center space-x-1.5">
             <button
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-              className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+              className={`px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold bg-white text-slate-600 transition-colors cursor-pointer select-none ${currentPage === 1 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-50'}`}
             >
-              Previous
+              Prev
             </button>
+
+            {getPageNumbers().map((page, index) => (
+              page === '...' ? (
+                <span key={`ellipsis-${index}`} className="px-2 text-slate-400 font-bold">...</span>
+              ) : (
+                <button
+                  key={`page-${page}`}
+                  onClick={() => setCurrentPage(page)}
+                  className={`w-8 h-8 rounded-lg text-xs font-extrabold transition-all cursor-pointer border ${currentPage === page
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-500/10'
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                >
+                  {page}
+                </button>
+              )
+            ))}
+
             <button
               onClick={() => setCurrentPage(p => Math.min(computedTotalPages, p + 1))}
               disabled={currentPage === computedTotalPages}
-              className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+              className={`px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold bg-white text-slate-600 transition-colors cursor-pointer select-none ${currentPage === computedTotalPages ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-50'}`}
             >
               Next
             </button>
