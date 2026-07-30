@@ -132,8 +132,9 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
   const [notes, setNotes] = useState('');
 
   const [items, setItems] = useState([
-    { id: Date.now(), product: '', variant: '', qty: 1, price: 0, disc: 0, tax: 0 }
+    { id: Date.now(), product: '', variant: '', qty: 1, height: 0, width: 0, sqftPerPcs: 0, totalSqft: 0, price: 0, disc: 0, tax: 0 }
   ]);
+
 
   const [amountReceived, setAmountReceived] = useState(0);
   const [paymentStatus, setPaymentStatus] = useState('Pending (Credit)');
@@ -361,7 +362,8 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
   };
 
   // ── Item handlers ──────────────────────────────────────────
-  const handleAddItemRow = () => setItems([...items, { id: Date.now(), product: '', variant: '', qty: 1, price: 0, disc: 0, tax: 0 }]);
+  // ── Item handlers ──────────────────────────────────────────
+  const handleAddItemRow = () => setItems([...items, { id: Date.now(), product: '', variant: '', qty: 1, height: 0, width: 0, sqftPerPcs: 0, totalSqft: 0, price: 0, disc: 0, tax: 0 }]);
   const handleRemoveItemRow = (id) => { if (items.length > 1) setItems(items.filter(i => i.id !== id)); };
   const preventInvalidNumberInput = (e) => { if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault(); };
 
@@ -369,16 +371,49 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
     setItems(prev => prev.map(item => {
       if (item.id !== id) return item;
       let update = { [field]: value };
-      if (field === 'variant' && value !== '') {
+      
+      if (field === 'variant') {
         const found = productList.find(p => p.name === item.product);
-        if (found?.variantDetails) {
-          const vd = found.variantDetails.find(v => v.variantName === value);
-          if (vd) update.price = vd.retailPrice;
+        if (found) {
+          let h = 0, w = 0, price = item.price;
+          if (value !== '' && found.variantDetails?.length > 0) {
+            const vd = found.variantDetails.find(v => v.variantName === value);
+            if (vd) {
+              if (vd.retailPrice) price = vd.retailPrice;
+              if (vd.height > 0 && vd.width > 0) {
+                h = vd.height;
+                w = vd.width;
+              }
+            }
+          }
+          // Fallback to main product height and width if variant has no height/width
+          if (h === 0 || w === 0) {
+            h = found.height || 0;
+            w = found.width || 0;
+          }
+          update.price = price;
+          update.height = h;
+          update.width = w;
         }
       }
-      return { ...item, ...update };
+
+      const nextItem = { ...item, ...update };
+      const h = parseFloat(nextItem.height) || 0;
+      const w = parseFloat(nextItem.width) || 0;
+      const q = parseFloat(nextItem.qty) || 0;
+
+      const sqftPerPcs = (h > 0 && w > 0) ? (h * w) / 144 : 0;
+      const totalSqft = q * sqftPerPcs;
+
+      return {
+        ...nextItem,
+        sqftPerPcs: parseFloat(sqftPerPcs.toFixed(4)),
+        totalSqft: parseFloat(totalSqft.toFixed(4)),
+      };
     }));
   };
+
+
 
   const handleProductSelect = async (id, productName) => {
     const found = productList.find(p => p.name === productName);
@@ -400,9 +435,28 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
       price = found.retailPrice;
     }
 
-    setItems(items.map(item => item.id === id ? { ...item, product: productName, variant: '', price } : item));
+    const h = found?.height || 0;
+    const w = found?.width || 0;
+    const sqftPerPcs = (h > 0 && w > 0) ? (h * w) / 144 : (found?.sqftPerPcs || 0);
+
+    setItems(items.map(item => {
+      if (item.id !== id) return item;
+      const q = parseFloat(item.qty) || 1;
+      const totalSqft = q * sqftPerPcs;
+      return {
+        ...item,
+        product: productName,
+        variant: '',
+        price,
+        height: h,
+        width: w,
+        sqftPerPcs: parseFloat(sqftPerPcs.toFixed(4)),
+        totalSqft: parseFloat(totalSqft.toFixed(4)),
+      };
+    }));
     await updatePriceHint(id, productName);
   };
+
 
   // ── Validation ─────────────────────────────────────────────
   const hasPartialData = () =>
@@ -442,11 +496,16 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
         product: i.product.trim(),
         variant: i.variant || '',
         qty: parseInt(i.qty) || 0,
+        height: parseFloat(i.height) || 0,
+        width: parseFloat(i.width) || 0,
+        sqftPerPcs: parseFloat(i.sqftPerPcs) || 0,
+        totalSqft: parseFloat(i.totalSqft) || 0,
         price: parseFloat(i.price) || 0,
         disc: parseFloat(i.disc) || 0,
         tax: parseFloat(i.tax) || 0,
         total: (parseInt(i.qty) || 0) * (parseFloat(i.price) || 0) * (1 - (parseFloat(i.disc) || 0) / 100),
       })),
+
       subtotal: summary.subtotal,
       discount: summary.discount,
       tax: summary.tax,
@@ -729,13 +788,12 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
               <table className="w-full text-left text-xs min-w-[600px]">
                 <thead>
                   <tr className="text-slate-400 font-bold uppercase tracking-wider border-b border-slate-100">
-                    <th className="pb-3 w-[30%]">Product</th>
-                    <th className="pb-3 w-[18%]">Variant</th>
-                    <th className="pb-3 w-[8%]">QTY</th>
-                    <th className="pb-3 w-[18%]">Price (₹)</th>
-                    <th className="pb-3 w-[10%]">Disc %</th>
-                    <th className="pb-3 w-[10%]">Tax %</th>
-                    <th className="pb-3 w-[6%]"></th>
+                    <th className="pb-3 w-[34%]">Product</th>
+                    <th className="pb-3 w-[22%]">Variant</th>
+                    <th className="pb-3 w-[14%]">QTY</th>
+                    <th className="pb-3 w-[18%]">Price (₹/pcs)</th>
+                    <th className="pb-3 w-[8%]">Tax %</th>
+                    <th className="pb-3 w-[4%]"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50 font-semibold">
@@ -750,6 +808,12 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
                             onChange={(val) => handleItemChange(item.id, 'product', val)}
                             onSelect={(val) => handleProductSelect(item.id, val)} 
                           />
+                          {item.height > 0 && item.width > 0 && (
+                            <div className="mt-1 text-[10px] text-slate-500 font-semibold flex items-center gap-1.5 flex-wrap">
+                              <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono font-bold">Size: {item.height}" × {item.width}"</span>
+                              <span className="text-emerald-700 font-bold">({item.sqftPerPcs.toFixed(2)} Sq.Ft/pcs)</span>
+                            </div>
+                          )}
                         </td>
                         <td className="py-3 pr-2 align-top">
                           {(() => {
@@ -777,6 +841,11 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
                           <input type="number" min="1" value={item.qty === 0 ? '' : item.qty}
                             onChange={e => handleItemChange(item.id, 'qty', e.target.value)} onKeyDown={preventInvalidNumberInput}
                             className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded-lg focus:outline-none text-center" />
+                          {item.totalSqft > 0 && (
+                            <div className="mt-1 text-[10px] text-emerald-700 font-extrabold tracking-tight bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/60 text-center" title={`${item.sqftPerPcs.toFixed(2)} Sq.Ft/pcs`}>
+                              {item.totalSqft.toLocaleString('en-IN', { maximumFractionDigits: 2 })} Sq.Ft
+                            </div>
+                          )}
                         </td>
                         <td className="py-3 pr-2 align-top">
                           <input type="number" min="0" value={item.price === 0 ? '' : item.price}
@@ -791,11 +860,6 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
                               <p className="text-[9px] text-slate-400 font-medium">Avg: ₹{hint.avgPrice?.toFixed(0)}</p>
                             </div>
                           )}
-                        </td>
-                        <td className="py-3 pr-2 align-top">
-                          <input type="number" min="0" max="100" value={item.disc === 0 ? '' : item.disc}
-                            onChange={e => handleItemChange(item.id, 'disc', e.target.value)} onKeyDown={preventInvalidNumberInput}
-                            className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded-lg focus:outline-none text-center" />
                         </td>
                         <td className="py-3 pr-2 align-top">
                           <select value={item.tax} onChange={e => handleItemChange(item.id, 'tax', parseInt(e.target.value) || 0)}
@@ -815,6 +879,8 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
                 </tbody>
               </table>
             </div>
+
+
             <button type="button" onClick={handleAddItemRow}
               className="w-full py-3 border border-dashed border-slate-200 hover:border-emerald-500 rounded-xl flex items-center justify-center space-x-1.5 text-xs text-slate-500 hover:text-emerald-600 font-bold transition-all bg-slate-50/20 hover:bg-emerald-50/10 cursor-pointer">
               <Plus className="w-4 h-4" /><span>Add Another Row</span>
@@ -831,10 +897,12 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
                 <span>Subtotal</span>
                 <span className="text-slate-800 font-bold">₹{summary.subtotal.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between items-center text-emerald-600">
-                <span>Discount</span>
-                <span className="font-bold">- ₹{summary.discount.toFixed(2)}</span>
-              </div>
+              {summary.discount > 0 && (
+                <div className="flex justify-between items-center text-emerald-600">
+                  <span>Discount</span>
+                  <span className="font-bold">- ₹{summary.discount.toFixed(2)}</span>
+                </div>
+              )}
               <div className="flex justify-between items-center">
                 <span>Estimated Tax (GST)</span>
                 <span className="text-slate-800 font-bold">+ ₹{summary.tax.toFixed(2)}</span>
@@ -843,6 +911,7 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
                 <span className="font-bold text-slate-800">Grand Total</span>
                 <span className="text-base font-extrabold text-slate-900">₹{summary.grandTotal.toFixed(2)}</span>
               </div>
+
             </div>
 
             <div className="space-y-1.5 pt-2 border-t border-slate-100">

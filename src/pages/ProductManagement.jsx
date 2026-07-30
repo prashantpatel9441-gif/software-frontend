@@ -45,14 +45,19 @@ export const ProductManagement = () => {
 
   const [isVariantModalOpen, setIsVariantModalOpen] = useState(false);
   const [newVariant, setNewVariant] = useState({
+
     productId: '',
     variantName: '',
     sku: '',
     qty: 0,
     retailPrice: '',
     wholesalePrice: '',
+    height: 0,
+    width: 0,
+    sqftPerPcs: 0,
     image: ''
   });
+
 
   const [newProduct, setNewProduct] = useState({
     name: '',
@@ -61,12 +66,16 @@ export const ProductManagement = () => {
     sku: '',
     vendor: '',
     qty: 0,
+    height: 0,
+    width: 0,
+    sqftPerPcs: 0,
     wholesalePrice: '',
     retailPrice: '',
     status: 'Active',
     image: '',
     srNo: ''
   });
+
 
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imageInputMode, setImageInputMode] = useState('url'); // 'url' or 'upload'
@@ -164,11 +173,12 @@ export const ProductManagement = () => {
 
   const handleSelectAll = (e) => {
     if (e.target.checked) {
-      setSelectedProducts(currentProducts.map(p => p.id));
+      setSelectedProducts(products.map(p => p.id));
     } else {
       setSelectedProducts([]);
     }
   };
+
 
   const handleSelectProduct = (id) => {
     if (selectedProducts.includes(id)) {
@@ -194,6 +204,10 @@ export const ProductManagement = () => {
     if (modalType === 'view') return;
 
     try {
+      const h = parseFloat(newProduct.height) || 0;
+      const w = parseFloat(newProduct.width) || 0;
+      const sq = (h > 0 && w > 0) ? (h * w) / 144 : (parseFloat(newProduct.sqftPerPcs) || 0);
+
       const productData = {
         name: newProduct.name,
         image: newProduct.image,
@@ -202,6 +216,9 @@ export const ProductManagement = () => {
         sku: newProduct.sku,
         vendor: newProduct.vendor,
         qty: parseInt(newProduct.qty) || 0,
+        height: h,
+        width: w,
+        sqftPerPcs: sq,
         wholesalePrice: parseFloat(newProduct.wholesalePrice) || 0,
         retailPrice: parseFloat(newProduct.retailPrice) || 0,
         status: newProduct.status,
@@ -228,11 +245,18 @@ export const ProductManagement = () => {
   const handleVariantSubmit = async (e) => {
     e.preventDefault();
     try {
+      const h = parseFloat(newVariant.height) || 0;
+      const w = parseFloat(newVariant.width) || 0;
+      const sq = (h > 0 && w > 0) ? (h * w) / 144 : 0;
+
       await api.post(`/products/${newVariant.productId}/variants`, {
         ...newVariant,
         qty: parseInt(newVariant.qty) || 0,
         retailPrice: parseFloat(newVariant.retailPrice) || 0,
-        wholesalePrice: parseFloat(newVariant.wholesalePrice) || 0
+        wholesalePrice: parseFloat(newVariant.wholesalePrice) || 0,
+        height: h,
+        width: w,
+        sqftPerPcs: sq
       });
       showToast('Variant added successfully!', 'success');
       fetchProducts();
@@ -244,6 +268,9 @@ export const ProductManagement = () => {
         qty: 0,
         retailPrice: '',
         wholesalePrice: '',
+        height: 0,
+        width: 0,
+        sqftPerPcs: 0,
         image: ''
       });
     } catch (error) {
@@ -251,6 +278,7 @@ export const ProductManagement = () => {
       showToast(error.response?.data?.message || 'Error adding variant', 'error');
     }
   };
+
 
   const resetForm = () => {
     setNewProduct({
@@ -260,6 +288,9 @@ export const ProductManagement = () => {
       sku: '',
       vendor: '',
       qty: 0,
+      height: 0,
+      width: 0,
+      sqftPerPcs: 0,
       wholesalePrice: '',
       retailPrice: '',
       status: 'Active',
@@ -267,6 +298,7 @@ export const ProductManagement = () => {
       srNo: ''
     });
   };
+
 
   const openAddModal = () => {
     resetForm();
@@ -518,7 +550,7 @@ export const ProductManagement = () => {
                 <th className="py-3.5 px-4 w-10 text-center">
                   <input
                     type="checkbox"
-                    checked={currentProducts.length > 0 && selectedProducts.length === currentProducts.length}
+                    checked={products.length > 0 && selectedProducts.length === products.length}
                     onChange={handleSelectAll}
                     className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                   />
@@ -583,8 +615,9 @@ export const ProductManagement = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700 font-semibold">
-              {currentProducts.length > 0 ? (
-                currentProducts.map((product) => (
+              {products.length > 0 ? (
+                products.map((product) => (
+
                   <tr
                     key={product.id}
                     className={`hover:bg-slate-50/30 transition-colors ${selectedProducts.includes(product.id) ? 'bg-slate-50/50' : ''
@@ -988,6 +1021,42 @@ export const ProductManagement = () => {
                   />
                 </div>
 
+                {/* Height (inches) */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Height (inches)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    disabled={modalType === 'view'}
+                    value={newProduct.height === 0 ? '' : newProduct.height}
+                    onKeyDown={preventInvalidNumberInput}
+                    onChange={(e) => setNewProduct({ ...newProduct, height: e.target.value })}
+                    placeholder="e.g. 24"
+                    className={`w-full px-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all ${modalType === 'view' ? 'opacity-70 cursor-not-allowed' : ''}`}
+                  />
+                </div>
+
+                {/* Width (inches) */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Width (inches)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    disabled={modalType === 'view'}
+                    value={newProduct.width === 0 ? '' : newProduct.width}
+                    onKeyDown={preventInvalidNumberInput}
+                    onChange={(e) => setNewProduct({ ...newProduct, width: e.target.value })}
+                    placeholder="e.g. 36"
+                    className={`w-full px-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all ${modalType === 'view' ? 'opacity-70 cursor-not-allowed' : ''}`}
+                  />
+                  {parseFloat(newProduct.height) > 0 && parseFloat(newProduct.width) > 0 && (
+                    <p className="text-[10px] text-emerald-600 font-bold mt-1">
+                      Calculated: {((parseFloat(newProduct.height) * parseFloat(newProduct.width)) / 144).toFixed(2)} Sq.Ft per piece
+                    </p>
+                  )}
+                </div>
+
+
                 {/* Status */}
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status *</label>
@@ -1145,6 +1214,40 @@ export const ProductManagement = () => {
                     className="w-full px-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all"
                   />
                 </div>
+
+                {/* Variant Height (inches) */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Height (in)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={newVariant.height === 0 ? '' : newVariant.height}
+                    onKeyDown={preventInvalidNumberInput}
+                    onChange={(e) => setNewVariant({ ...newVariant, height: e.target.value })}
+                    placeholder="e.g. 24"
+                    className="w-full px-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all"
+                  />
+                </div>
+
+                {/* Variant Width (inches) */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Width (in)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={newVariant.width === 0 ? '' : newVariant.width}
+                    onKeyDown={preventInvalidNumberInput}
+                    onChange={(e) => setNewVariant({ ...newVariant, width: e.target.value })}
+                    placeholder="e.g. 36"
+                    className="w-full px-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all"
+                  />
+                  {parseFloat(newVariant.height) > 0 && parseFloat(newVariant.width) > 0 && (
+                    <p className="text-[10px] text-emerald-600 font-bold mt-1">
+                      Calculated: {((parseFloat(newVariant.height) * parseFloat(newVariant.width)) / 144).toFixed(2)} Sq.Ft per piece
+                    </p>
+                  )}
+                </div>
+
 
                 {/* Variant Image */}
                 <div className="space-y-2 sm:col-span-2">

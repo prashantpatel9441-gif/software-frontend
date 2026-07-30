@@ -310,7 +310,6 @@ const ProductHistoryTab = ({ customerId, allInvoices, customer }) => {
                               <th className="text-left pb-2">Date</th>
                               <th className="text-center pb-2">Qty</th>
                               <th className="text-right pb-2">Rate</th>
-                              <th className="text-right pb-2">Disc %</th>
                               <th className="text-right pb-2">Total</th>
                             </tr>
                           </thead>
@@ -321,11 +320,11 @@ const ProductHistoryTab = ({ customerId, allInvoices, customer }) => {
                                 <td className="py-1.5 text-slate-500">{fmtDate(inv.date)}</td>
                                 <td className="py-1.5 text-center text-slate-700 font-semibold">{inv.qty}</td>
                                 <td className="py-1.5 text-right text-emerald-600 font-bold">{fmt(inv.price)}</td>
-                                <td className="py-1.5 text-right text-slate-500">{inv.disc || 0}%</td>
                                 <td className="py-1.5 text-right font-extrabold text-slate-800">{fmt(inv.total)}</td>
                               </tr>
                             ))}
                           </tbody>
+
                         </table>
                       </td>
                     </tr>

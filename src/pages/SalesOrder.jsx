@@ -296,17 +296,30 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
     // Build Item Rows
     let itemRows = '';
     itemsList.forEach((item, index) => {
+      const pName = item.product || item.description || '';
+      let dimStr = '';
+      if (item.height > 0 && item.width > 0) {
+        const sq = item.totalSqft || (item.qty * (item.height * item.width) / 144);
+        dimStr = `<div style="font-size: 10px; color: #444; margin-top: 1px; font-weight: bold;">Size: ${item.height}" × ${item.width}" | Total: ${sq.toLocaleString('en-IN', {maximumFractionDigits:2})} Sq.Ft</div>`;
+      } else if (item.totalSqft > 0) {
+        dimStr = `<div style="font-size: 10px; color: #444; margin-top: 1px; font-weight: bold;">Total: ${item.totalSqft.toLocaleString('en-IN', {maximumFractionDigits:2})} Sq.Ft</div>`;
+      }
+
       itemRows += `
         <tr>
           <td style="border-right: 1px solid #000; padding:4px 8px; text-align:center;">${index + 1}</td>
-          <td style="border-right: 1px solid #000; padding:4px 8px;">${item.product || item.description || ''}</td>
+          <td style="border-right: 1px solid #000; padding:4px 8px;">
+            <div style="font-weight: bold;">${pName}</div>
+            ${dimStr}
+          </td>
           <td style="border-right: 1px solid #000; padding:4px 8px; text-align:center;">${item.qty}</td>
           <td style="border-right: 1px solid #000; padding:4px 8px; text-align:right;">Rs. ${(item.price || 0).toLocaleString('en-IN', {minimumFractionDigits:2})}</td>
-          <td style="border-right: 1px solid #000; padding:4px 8px; text-align:right;">Rs. ${(item.disc || 0).toLocaleString('en-IN', {minimumFractionDigits:2})}</td>
           <td style="padding:4px 8px; text-align:right;">Rs. ${(item.total || (item.qty * (item.price || 0))).toLocaleString('en-IN', {minimumFractionDigits:2})}</td>
         </tr>
       `;
     });
+
+
 
     const amountInWords = numberToWords(Math.round(detail.grandTotal || 0));
 
@@ -423,11 +436,10 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
     <thead>
       <tr>
         <th style="width: 6%;">Sr<br/>No.</th>
-        <th style="width: 44%;">Item Name / Description</th>
+        <th style="width: 49%;">Item Name / Description</th>
         <th style="width: 10%;">Quantity</th>
-        <th style="width: 13%;">Unit Price</th>
-        <th style="width: 12%;">Discount</th>
-        <th style="width: 15%;">Total</th>
+        <th style="width: 15%;">Unit Price</th>
+        <th style="width: 20%;">Total</th>
       </tr>
     </thead>
     <tbody>
@@ -437,43 +449,43 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
         <td style="border-right: 1px solid #000;"></td>
         <td style="border-right: 1px solid #000;"></td>
         <td style="border-right: 1px solid #000;"></td>
-        <td style="border-right: 1px solid #000;"></td>
         <td></td>
       </tr>
       
       <!-- Totals Section -->
       <tr>
-        <td colspan="4" style="border-top: 1px solid #000; border-right: 1px solid #000;"></td>
+        <td colspan="3" style="border-top: 1px solid #000; border-right: 1px solid #000;"></td>
         <td class="summary-label" style="border-top: 1px solid #000;">Sub Total :</td>
         <td class="summary-val" style="border-top: 1px solid #000;">Rs. ${(detail.subtotal || 0).toLocaleString('en-IN', {minimumFractionDigits:2})}</td>
       </tr>
       <tr>
-        <td colspan="4" style="border-right: 1px solid #000;"></td>
+        <td colspan="3" style="border-right: 1px solid #000;"></td>
         <td class="summary-label">Other Charge :</td>
         <td class="summary-val">Rs. 0.00</td>
       </tr>
       <tr>
-        <td colspan="4" style="border-right: 1px solid #000;"></td>
+        <td colspan="3" style="border-right: 1px solid #000;"></td>
         <td class="summary-label">Shipping Charge :</td>
         <td class="summary-val">Rs. 0.00</td>
       </tr>
       <tr>
-        <td colspan="4" style="border-right: 1px solid #000;"></td>
+        <td colspan="3" style="border-right: 1px solid #000;"></td>
         <td class="summary-label">Round Off :</td>
         <td class="summary-val">Rs. 0.00</td>
       </tr>
       <tr>
-        <td colspan="4" style="border-right: 1px solid #000;"></td>
+        <td colspan="3" style="border-right: 1px solid #000;"></td>
         <td class="summary-label" style="font-weight: bold;">Total :</td>
         <td class="summary-val">Rs. ${(detail.grandTotal || 0).toLocaleString('en-IN', {minimumFractionDigits:2})}</td>
       </tr>
       <tr>
-        <td colspan="6" class="words-row">
+        <td colspan="5" class="words-row">
           ${amountInWords} Only /-
         </td>
       </tr>
     </tbody>
   </table>
+
 
   <div class="eoe">E. & O. E.</div>
 
@@ -504,10 +516,17 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
     <div class="line" style="height: 2px;"></div>
   </div>
 
-  ${autoPrint ? '<script>window.onload=()=>{window.print();window.onafterprint=()=>window.close();}</script>' : ''}
+  ${autoPrint ? `<script>
+    setTimeout(function() {
+      window.print();
+      window.onafterprint = function() { window.close(); };
+    }, 300);
+  </script>` : ''}
 </body>
 </html>`;
   };
+
+
 
 
   const handlePrintPDF = (inv) => {
