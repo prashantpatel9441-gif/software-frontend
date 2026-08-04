@@ -293,27 +293,42 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
     // Format dates
     const fIssue = detail.issueDate ? (typeof detail.issueDate === 'string' ? detail.issueDate : new Date(detail.issueDate).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'})) : '';
     
+    // Detect if any item is Feet unit
+    const hasFeetUnit = itemsList.some(item => item.unit === 'Feet');
+
     // Build Item Rows
     let itemRows = '';
     itemsList.forEach((item, index) => {
       const pName = item.product || item.description || '';
+
+      // dimStr: ONLY show Size (e.g. 22" × 78") if height & width exist. NEVER print Total Sq.Ft under product name.
       let dimStr = '';
       if (item.height > 0 && item.width > 0) {
-        const sq = item.totalSqft || (item.qty * (item.height * item.width) / 144);
-        dimStr = `<div style="font-size: 10px; color: #444; margin-top: 1px; font-weight: bold;">Size: ${item.height}" × ${item.width}" | Total: ${sq.toLocaleString('en-IN', {maximumFractionDigits:2})} Sq.Ft</div>`;
-      } else if (item.totalSqft > 0) {
-        dimStr = `<div style="font-size: 10px; color: #444; margin-top: 1px; font-weight: bold;">Total: ${item.totalSqft.toLocaleString('en-IN', {maximumFractionDigits:2})} Sq.Ft</div>`;
+        dimStr = `<div style="font-size: 10px; color: #444; margin-top: 1px; font-weight: bold;">Size: ${item.height}" × ${item.width}"</div>`;
       }
+
+      // Calculate Feet value: if totalSqft > 0 or unit === 'Feet' or height/width exist
+      const calculatedSqft = item.totalSqft || (item.height > 0 && item.width > 0 ? (item.qty * (item.height * item.width) / 144) : 0);
+      const hasFeet = item.unit === 'Feet' || calculatedSqft > 0;
+      
+      const feetCell = hasFeet
+        ? (calculatedSqft > 0 ? parseFloat(calculatedSqft.toFixed(2)).toString() : `${item.qty}`)
+        : '';
+
+      // Qty value: If pure Feet item with no dimensions, Qty column is empty; otherwise shows item.qty
+      const isPureFeet = item.unit === 'Feet' && item.height === 0 && item.width === 0;
+      const qtyCell = isPureFeet ? '' : `${item.qty || 1}`;
 
       itemRows += `
         <tr>
           <td style="border-right: 1px solid #000; padding:4px 8px; text-align:center;">${index + 1}</td>
           <td style="border-right: 1px solid #000; padding:4px 8px;">
-            <div style="font-weight: bold;">${pName}</div>
+            <div style="font-weight: bold;">${pName}${item.variant ? ` (${item.variant})` : ''}</div>
             ${dimStr}
           </td>
-          <td style="border-right: 1px solid #000; padding:4px 8px; text-align:center;">${item.qty}</td>
-          <td style="border-right: 1px solid #000; padding:4px 8px; text-align:right;">Rs. ${(item.price || 0).toLocaleString('en-IN', {minimumFractionDigits:2})}</td>
+          <td style="border-right: 1px solid #000; padding:4px 8px; text-align:center;">${qtyCell}</td>
+          <td style="border-right: 1px solid #000; padding:4px 8px; text-align:center;">${feetCell}</td>
+          <td style="border-right: 1px solid #000; padding:4px 8px; text-align:right;">Rs. ${(item.pricePerSqft > 0 ? item.pricePerSqft : (item.price || 0)).toLocaleString('en-IN', {minimumFractionDigits:2})}</td>
           <td style="padding:4px 8px; text-align:right;">Rs. ${(item.total || (item.qty * (item.price || 0))).toLocaleString('en-IN', {minimumFractionDigits:2})}</td>
         </tr>
       `;
@@ -348,7 +363,7 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
       flex-direction: column;
     }
     .top-header { display: flex; justify-content: space-between; margin-bottom: 5px; }
-    .company-logo { max-height: 60px; max-width: 150px; margin-bottom: 10px; }
+    .company-logo { max-height: 120px; max-width: 280px; object-fit: contain; margin-bottom: 12px; }
     .company-name { font-size: 18px; font-weight: bold; }
     .company-addr { font-size: 12px; margin-top: 2px; }
     .state-tel { text-align: right; font-weight: bold; font-size: 12px; }
@@ -436,10 +451,11 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
     <thead>
       <tr>
         <th style="width: 6%;">Sr<br/>No.</th>
-        <th style="width: 49%;">Item Name / Description</th>
-        <th style="width: 10%;">Quantity</th>
+        <th style="width: 40%;">Item Name / Description</th>
+        <th style="width: 9%;">Quantity</th>
+        <th style="width: 9%;">Feet</th>
         <th style="width: 15%;">Unit Price</th>
-        <th style="width: 20%;">Total</th>
+        <th style="width: 21%;">Total</th>
       </tr>
     </thead>
     <tbody>
@@ -449,37 +465,33 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
         <td style="border-right: 1px solid #000;"></td>
         <td style="border-right: 1px solid #000;"></td>
         <td style="border-right: 1px solid #000;"></td>
+        <td style="border-right: 1px solid #000;"></td>
         <td></td>
       </tr>
       
       <!-- Totals Section -->
       <tr>
-        <td colspan="3" style="border-top: 1px solid #000; border-right: 1px solid #000;"></td>
+        <td colspan="4" style="border-top: 1px solid #000; border-right: 1px solid #000;"></td>
         <td class="summary-label" style="border-top: 1px solid #000;">Sub Total :</td>
         <td class="summary-val" style="border-top: 1px solid #000;">Rs. ${(detail.subtotal || 0).toLocaleString('en-IN', {minimumFractionDigits:2})}</td>
       </tr>
       <tr>
-        <td colspan="3" style="border-right: 1px solid #000;"></td>
+        <td colspan="4" style="border-right: 1px solid #000;"></td>
         <td class="summary-label">Other Charge :</td>
-        <td class="summary-val">Rs. 0.00</td>
+        <td class="summary-val">Rs. ${(detail.otherCharge || 0).toLocaleString('en-IN', {minimumFractionDigits:2})}</td>
       </tr>
       <tr>
-        <td colspan="3" style="border-right: 1px solid #000;"></td>
-        <td class="summary-label">Shipping Charge :</td>
-        <td class="summary-val">Rs. 0.00</td>
-      </tr>
-      <tr>
-        <td colspan="3" style="border-right: 1px solid #000;"></td>
+        <td colspan="4" style="border-right: 1px solid #000;"></td>
         <td class="summary-label">Round Off :</td>
-        <td class="summary-val">Rs. 0.00</td>
+        <td class="summary-val">Rs. ${(detail.roundOff || 0).toLocaleString('en-IN', {minimumFractionDigits:2})}</td>
       </tr>
       <tr>
-        <td colspan="3" style="border-right: 1px solid #000;"></td>
+        <td colspan="4" style="border-right: 1px solid #000;"></td>
         <td class="summary-label" style="font-weight: bold;">Total :</td>
         <td class="summary-val">Rs. ${(detail.grandTotal || 0).toLocaleString('en-IN', {minimumFractionDigits:2})}</td>
       </tr>
       <tr>
-        <td colspan="5" class="words-row">
+        <td colspan="6" class="words-row">
           ${amountInWords} Only /-
         </td>
       </tr>
@@ -855,9 +867,16 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
                   <tbody>
                     {selectedInvoice.items && selectedInvoice.items.map((item, i) => (
                       <tr key={i} className={`${i < selectedInvoice.items.length - 1 ? 'border-b border-slate-50' : ''} hover:bg-slate-50/50 transition-colors`}>
-                        <td className="py-3.5 px-4 text-slate-700 font-semibold leading-snug">{item.description || item.product}</td>
-                        <td className="py-3.5 px-4 text-center text-slate-500">{item.qty}</td>
-                        <td className="py-3.5 px-4 text-right text-slate-500">₹{(item.price || 0).toLocaleString('en-IN')}</td>
+                        <td className="py-3.5 px-4 text-slate-700 font-semibold leading-snug">
+                          <div>{item.description || item.product}{item.variant ? ` (${item.variant})` : ''}</div>
+                          {item.height > 0 && item.width > 0 && (
+                            <div className="text-[10px] text-slate-400 mt-0.5">Size: {item.height}" × {item.width}"</div>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 text-center text-slate-500">
+                          {item.totalSqft > 0 ? `${item.totalSqft} Ft` : item.qty}
+                        </td>
+                        <td className="py-3.5 px-4 text-right text-slate-500">₹{(item.pricePerSqft > 0 ? item.pricePerSqft : (item.price || 0)).toLocaleString('en-IN')}</td>
                         <td className="py-3.5 px-4 text-right font-extrabold text-slate-800">₹{(item.total || 0).toLocaleString('en-IN')}</td>
                       </tr>
                     ))}

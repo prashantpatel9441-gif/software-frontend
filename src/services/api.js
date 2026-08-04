@@ -1,4 +1,4 @@
-export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 export const BASE_URL = API_URL.replace('/api', '');
 
 let getRequestController = new AbortController();
@@ -48,8 +48,7 @@ export const api = {
       return result;
     } catch (error) {
       if (error.name === 'AbortError') {
-        // Return a promise that never resolves so subsequent code is skipped
-        return new Promise(() => {});
+        return { data: [], total: 0 };
       }
       throw error;
     }

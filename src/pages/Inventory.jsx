@@ -60,6 +60,7 @@ export const Inventory = () => {
   // Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState('add'); // 'add' | 'edit'
+  const [stockAction, setStockAction] = useState('add'); // 'set' | 'add' | 'reduce'
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [isValuationOpen, setIsValuationOpen] = useState(false);
 
@@ -324,71 +325,51 @@ export const Inventory = () => {
       baseSku: ''
     });
     setVariantQuantities({});
+    setStockAction('add');
     setModalType('add');
     setIsModalOpen(true);
   };
 
-  const openEditModal = (item) => {
+  const openEditModal = async (item) => {
+    if (products.length === 0) {
+      await fetchProducts();
+    }
+    const prod = products.find(p => p.sku === item.baseSku || p.sku === item.sku || p.name.toLowerCase() === (item.name || '').toLowerCase());
     setItemForm({
       sku: item.sku,
       name: item.name,
       category: item.category,
-      warehouse: item.warehouse,
+      warehouse: item.warehouse || 'Main WH - A1',
       quantity: item.quantity,
       unitPrice: item.unitPrice,
       status: item.status,
       variant: item.variant || '',
-      baseSku: item.sku
+      baseSku: prod?.sku || item.baseSku || item.sku,
+      originalQuantity: item.quantity || 0
     });
+    setStockAction('set');
     setModalType('edit');
     setIsModalOpen(true);
   };
 
-  // Form Submit
-  const handleFormSubmit = async (e) => {
-    e.preventDefault();
+  // Save Stock Handler (Supports direct Add +, Minus -, or Set Total)
+  const handleSaveStock = async (e, actionType = 'add') => {
+    if (e) e.preventDefault();
 
-    if (modalType === 'add' && Object.keys(variantQuantities).length > 0) {
-      // Bulk Submit
-      const itemsToSubmit = [];
-      Object.entries(variantQuantities).forEach(([variantName, qty]) => {
-        if (qty !== '' && parseInt(qty) >= 0) {
-          const cleanV = variantName.replace(/[^a-zA-Z0-9]/g, '');
-          const qtyNum = parseInt(qty) || 0;
-          let finalStatus = 'In Stock';
-          if (qtyNum === 0) finalStatus = 'Out of Stock';
-          else if (qtyNum < 10) finalStatus = 'Low Stock';
-          
-          itemsToSubmit.push({
-            sku: `${itemForm.baseSku}-${cleanV}`,
-            baseSku: itemForm.baseSku,
-            name: itemForm.name.trim(),
-            category: itemForm.category,
-            warehouse: itemForm.warehouse,
-            quantity: qtyNum,
-            unitPrice: parseFloat(itemForm.unitPrice) || 0,
-            status: finalStatus,
-            variant: variantName
-          });
-        }
-      });
-      
-      try {
-        await api.post('/inventory/bulk', { items: itemsToSubmit });
-        fetchInventory();
-        setIsModalOpen(false);
-      } catch (error) {
-        console.error('Error saving inventory:', error);
-        showToast(error.message || 'Error saving inventory', 'error');
-      }
-      return;
+    if (!itemForm.name.trim()) return;
+    const finalSku = (itemForm.sku || itemForm.baseSku || `SKU-${Date.now().toString().slice(-6)}`).trim();
+
+    const enteredQty = parseInt(itemForm.quantity) || 0;
+    const origQty = modalType === 'edit' ? (parseInt(itemForm.originalQuantity) || 0) : 0;
+    
+    let qtyNum = enteredQty;
+    if (actionType === 'add' && modalType === 'edit') {
+      qtyNum = origQty + enteredQty;
+    } else if (actionType === 'minus' && modalType === 'edit') {
+      qtyNum = Math.max(0, origQty - enteredQty);
     }
 
-    if (!itemForm.sku.trim() || !itemForm.name.trim()) return;
-
-    // Auto calculate status from quantity if not manually flagged dead stock
     let finalStatus = itemForm.status;
-    const qtyNum = parseInt(itemForm.quantity) || 0;
     if (finalStatus !== 'Dead Stock') {
       if (qtyNum === 0) {
         finalStatus = 'Out of Stock';
@@ -400,10 +381,10 @@ export const Inventory = () => {
     }
 
     const itemData = {
-      sku: itemForm.sku.trim(),
+      sku: finalSku,
       name: itemForm.name.trim(),
       category: itemForm.category,
-      warehouse: itemForm.warehouse,
+      warehouse: itemForm.warehouse || 'Main WH - A1',
       quantity: qtyNum,
       unitPrice: parseFloat(itemForm.unitPrice) || 0,
       status: finalStatus,
@@ -421,13 +402,17 @@ export const Inventory = () => {
       } else {
         await api.put(`/inventory/${itemForm.sku}`, itemData);
       }
-      showToast(modalType === 'add' ? 'Inventory item added!' : 'Inventory item updated!', 'success');
       fetchInventory();
       setIsModalOpen(false);
-      resetForm();
+      showToast(
+        actionType === 'minus' ? `Subtracted ${enteredQty} pcs stock successfully`
+        : actionType === 'add' && modalType === 'edit' ? `Added ${enteredQty} pcs stock successfully`
+        : 'Stock saved successfully',
+        'success'
+      );
     } catch (error) {
-      console.error('Error saving inventory item:', error);
-      showToast(error.message || 'Error saving inventory item', 'error');
+      console.error('Error saving inventory:', error);
+      showToast(error.message || 'Error saving inventory', 'error');
     }
   };
 
@@ -892,7 +877,7 @@ export const Inventory = () => {
             </div>
 
             {/* Modal Body Form */}
-            <form onSubmit={handleFormSubmit} className="p-6 space-y-4">
+            <form onSubmit={(e) => handleSaveStock(e, 'add')} className="p-6 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Product Selection */}
                 {modalType === 'add' && (
@@ -936,87 +921,79 @@ export const Inventory = () => {
                   </div>
                 )}
 
-                {/* Variant & Quantity Bulk Selection */}
-                {modalType === 'add' && itemForm.baseSku && (() => {
-                  const prod = products.find(p => p.sku === itemForm.baseSku);
-                  if (prod && prod.variants && prod.variants.length > 0) {
-                    return (
-                      <div className="space-y-3 sm:col-span-2 bg-slate-50 border border-slate-200 rounded-xl p-4">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Set Quantities for Variants</label>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {prod.variants.map((vGroup) => (
-                            vGroup.options.map((opt) => {
-                              const variantName = `${vGroup.group}: ${opt}`;
+                {/* Variant Selection Dropdown & Suggested Chips Below */}
+                {(() => {
+                  const prod = products.find(p => p.sku === itemForm.baseSku || p.sku === itemForm.sku || p.name.toLowerCase() === (itemForm.name || '').toLowerCase());
+                  
+                  const vDetails = prod?.variantDetails || [];
+                  const vDetailsList = vDetails.map(vd => vd.variantName);
+
+                  const vGroups = prod?.variants || [];
+                  const vGroupsList = [];
+                  vGroups.forEach(vg => {
+                    vg.options.forEach(opt => {
+                      vGroupsList.push(`${vg.group}: ${opt}`);
+                    });
+                  });
+
+                  const invVariants = inventory
+                    .filter(inv => inv.variant && (inv.name.toLowerCase() === (itemForm.name || '').toLowerCase() || (prod?.sku && inv.baseSku === prod.sku)))
+                    .map(inv => inv.variant);
+
+                  const suggestedVariants = Array.from(new Set([...vDetailsList, ...vGroupsList, ...invVariants])).filter(Boolean);
+
+                  const applyVariant = (vName) => {
+                    const cleanV = vName.replace(/[^a-zA-Z0-9]/g, '');
+                    const matchVd = vDetails.find(vd => vd.variantName === vName);
+                    const newSku = matchVd?.sku || `${itemForm.baseSku || prod?.sku || itemForm.sku}-${cleanV}`;
+                    const newPrice = matchVd?.retailPrice || prod?.retailPrice || itemForm.unitPrice;
+                    setItemForm(f => ({ ...f, variant: vName, sku: newSku, unitPrice: newPrice }));
+                  };
+
+                  return (
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Select Variant *</label>
+                      
+                      {/* Dropdown */}
+                      <select
+                        value={itemForm.variant}
+                        onChange={(e) => applyVariant(e.target.value)}
+                        className="w-full px-3 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-xs text-slate-700 font-bold focus:outline-none cursor-pointer"
+                      >
+                        <option value="">-- Choose a Variant --</option>
+                        {suggestedVariants.map(vName => (
+                          <option key={vName} value={vName}>{vName}</option>
+                        ))}
+                      </select>
+
+                      {/* Clickable Suggestion Badges Below */}
+                      {suggestedVariants.length > 0 && (
+                        <div className="mt-2">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Suggested Variants:</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {suggestedVariants.map(vName => {
+                              const isSelected = itemForm.variant === vName;
                               return (
-                                <div key={variantName} className="flex items-center justify-between bg-white px-3 py-2 border border-slate-200 rounded-lg shadow-sm">
-                                  <span className="text-xs font-bold text-slate-700">{variantName}</span>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    placeholder="Qty"
-                                    value={variantQuantities[variantName] !== undefined ? variantQuantities[variantName] : ''}
-                                    onKeyDown={preventInvalidNumberInput}
-                                    onChange={(e) => setVariantQuantities({ ...variantQuantities, [variantName]: e.target.value })}
-                                    className="w-20 px-2 py-1 bg-slate-50 border border-slate-200 rounded-md text-xs font-bold text-center focus:outline-none focus:border-emerald-500"
-                                  />
-                                </div>
+                                <button
+                                  type="button"
+                                  key={vName}
+                                  onClick={() => applyVariant(vName)}
+                                  className={`text-xs px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                                    isSelected
+                                      ? 'bg-emerald-600 text-white shadow-sm'
+                                      : 'bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 border border-slate-200'
+                                  }`}
+                                >
+                                  {vName}
+                                </button>
                               );
-                            })
-                          ))}
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
-
-                {/* Single Item Details (Hidden if using bulk variants) */}
-                {!(modalType === 'add' && Object.keys(variantQuantities).length > 0) && (
-                  <>
-                    {/* Variant Selection (For Editing) */}
-                    {modalType === 'edit' && (() => {
-                      const prod = products.find(p => p.sku === itemForm.baseSku) || products.find(p => p.sku === itemForm.sku);
-                      if (!prod || !prod.variants || prod.variants.length === 0) return null;
-                      return (
-                        <div className="space-y-1.5 sm:col-span-2">
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Select Variant *</label>
-                          <select
-                            required
-                            value={itemForm.variant}
-                            onChange={(e) => {
-                               const v = e.target.value;
-                               const cleanV = v.replace(/[^a-zA-Z0-9]/g, '');
-                               setItemForm({ ...itemForm, variant: v, sku: `${itemForm.baseSku || itemForm.sku}-${cleanV}` });
-                            }}
-                            className="w-full px-3 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-xs text-slate-700 font-bold focus:outline-none cursor-pointer"
-                          >
-                            <option value="">-- Choose a Variant --</option>
-                            {prod.variants.map((vGroup) => (
-                               vGroup.options.map((opt) => (
-                                 <option key={`${vGroup.group}-${opt}`} value={`${vGroup.group}: ${opt}`}>{vGroup.group}: {opt}</option>
-                               ))
-                            ))}
-                          </select>
-                        </div>
-                      );
-                    })()}
-
-                    {/* SKU Code */}
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Inventory SKU *</label>
-                      <input
-                        type="text"
-                        required
-                        disabled={modalType === 'edit'}
-                        value={itemForm.sku}
-                        onChange={(e) => setItemForm({ ...itemForm, sku: e.target.value })}
-                        placeholder="e.g. SKU-1007"
-                        className={`w-full px-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all ${modalType === 'edit' ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''
-                          }`}
-                      />
+                      )}
                     </div>
-                  </>
-                )}
+                  );
+                })()}
 
                 {/* Product Name */}
                 <div className="space-y-1.5">
@@ -1046,36 +1023,27 @@ export const Inventory = () => {
                   </select>
                 </div>
 
-                {/* Warehouse Location */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Warehouse Location *</label>
-                  <select
-                    value={itemForm.warehouse}
-                    onChange={(e) => setItemForm({ ...itemForm, warehouse: e.target.value })}
-                    className="w-full px-3 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-xs text-slate-700 font-bold focus:outline-none cursor-pointer"
-                  >
-                    <option value="Main WH - A1">Main WH - A1</option>
-                    <option value="Main WH - B2">Main WH - B2</option>
-                    <option value="Retail Store">Retail Store</option>
-                  </select>
-                </div>
-
-                {/* Single Quantity (Hidden if bulk) */}
-                {!(modalType === 'add' && Object.keys(variantQuantities).length > 0) && (
-                  <div className="space-y-1.5">
+                {/* Stock Quantity Input */}
+                <div className="space-y-1.5 sm:col-span-2">
+                  <div className="flex items-center justify-between">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Quantity *</label>
-                    <input
-                      type="number"
-                      required
-                      min="0"
-                      value={itemForm.quantity === 0 ? '' : itemForm.quantity}
-                      onKeyDown={preventInvalidNumberInput}
-                      onChange={(e) => setItemForm({ ...itemForm, quantity: e.target.value })}
-                      placeholder="0"
-                      className="w-full px-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all"
-                    />
+                    {modalType === 'edit' && (
+                      <span className="text-xs font-bold text-slate-700 bg-slate-100 px-2.5 py-0.5 rounded-lg border border-slate-200">
+                        Current Stock: {itemForm.originalQuantity || 0} pcs
+                      </span>
+                    )}
                   </div>
-                )}
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    value={itemForm.quantity === 0 ? '' : itemForm.quantity}
+                    onKeyDown={preventInvalidNumberInput}
+                    onChange={(e) => setItemForm({ ...itemForm, quantity: e.target.value })}
+                    placeholder="Enter quantity e.g. 5"
+                    className="w-full px-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-xs text-slate-800 font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all"
+                  />
+                </div>
 
                 {/* Unit Price */}
                 <div className="space-y-1.5">
@@ -1116,21 +1084,45 @@ export const Inventory = () => {
                 </span>
               </div>
 
-              {/* Modal Actions */}
-              <div className="flex justify-end items-center space-x-3 pt-4 border-t border-slate-100">
+              {/* Modal Actions with Direct Add (+), Minus (-), Set Total Buttons */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-6 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-slate-800 transition-colors cursor-pointer"
+                  className="px-5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-slate-800 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 rounded-xl text-xs font-bold text-white transition-all cursor-pointer shadow-md shadow-emerald-500/15"
-                >
-                  {modalType === 'add' ? 'Add Item' : 'Save Changes'}
-                </button>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {modalType === 'edit' && (
+                    <button
+                      type="button"
+                      onClick={(e) => handleSaveStock(e, 'minus')}
+                      className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 rounded-xl text-xs font-bold text-white transition-all cursor-pointer shadow-md shadow-rose-500/15 flex items-center gap-1.5"
+                    >
+                      <span>➖</span> Minus Stock (-)
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={(e) => handleSaveStock(e, 'add')}
+                    className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 rounded-xl text-xs font-bold text-white transition-all cursor-pointer shadow-md shadow-emerald-500/15 flex items-center gap-1.5"
+                  >
+                    <span>➕</span> Add Stock (+)
+                  </button>
+
+                  {modalType === 'edit' && (
+                    <button
+                      type="button"
+                      onClick={(e) => handleSaveStock(e, 'set')}
+                      className="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 rounded-xl text-xs font-bold text-white transition-all cursor-pointer shadow-md shadow-slate-800/15"
+                    >
+                      Set Total Stock
+                    </button>
+                  )}
+                </div>
               </div>
             </form>
           </div>

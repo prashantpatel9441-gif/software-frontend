@@ -213,7 +213,7 @@ export const ProductManagement = () => {
         image: newProduct.image,
         category: newProduct.category,
         unit: newProduct.unit,
-        sku: newProduct.sku,
+        sku: newProduct.sku || `SKU-${Date.now().toString().slice(-6)}`,
         vendor: newProduct.vendor,
         qty: parseInt(newProduct.qty) || 0,
         height: h,
@@ -249,8 +249,10 @@ export const ProductManagement = () => {
       const w = parseFloat(newVariant.width) || 0;
       const sq = (h > 0 && w > 0) ? (h * w) / 144 : 0;
 
+      const variantSku = newVariant.sku || `SKU-V-${Date.now().toString().slice(-6)}`;
       await api.post(`/products/${newVariant.productId}/variants`, {
         ...newVariant,
+        sku: variantSku,
         qty: parseInt(newVariant.qty) || 0,
         retailPrice: parseFloat(newVariant.retailPrice) || 0,
         wholesalePrice: parseFloat(newVariant.wholesalePrice) || 0,
@@ -942,19 +944,7 @@ export const ProductManagement = () => {
 
 
 
-                {/* SKU */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">SKU Barcode *</label>
-                  <input
-                    type="text"
-                    required
-                    disabled={modalType === 'view' || modalType === 'edit'}
-                    value={newProduct.sku}
-                    onChange={(e) => setNewProduct({ ...newProduct, sku: e.target.value })}
-                    placeholder="e.g. SKU-1002"
-                    className={`w-full px-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all ${modalType !== 'add' ? 'opacity-70 bg-slate-100 cursor-not-allowed' : ''}`}
-                  />
-                </div>
+
 
                 {/* Vendor */}
                 <div className="space-y-1.5">
@@ -970,9 +960,11 @@ export const ProductManagement = () => {
                   />
                 </div>
 
-                {/* Initial Quantity */}
+                {/* Initial Quantity / Feet */}
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Quantity *</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    {newProduct.unit === 'Feet' ? 'Feet *' : 'Quantity *'}
+                  </label>
                   <input
                     type="number"
                     required
@@ -993,19 +985,7 @@ export const ProductManagement = () => {
                   />
                 </div>
 
-                {/* Wholesale Price */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Wholesale Price (₹) *</label>
-                  <input
-                    type="number"
-                    required
-                    disabled={modalType === 'view'}
-                    value={newProduct.wholesalePrice === 0 ? '' : newProduct.wholesalePrice}
-                    onKeyDown={preventInvalidNumberInput}
-                    onChange={(e) => setNewProduct({ ...newProduct, wholesalePrice: e.target.value })}
-                    className={`w-full px-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all ${modalType === 'view' ? 'opacity-70 cursor-not-allowed' : ''}`}
-                  />
-                </div>
+
 
                 {/* Retail Price */}
                 <div className="space-y-1.5">
@@ -1081,11 +1061,8 @@ export const ProductManagement = () => {
                     onChange={(e) => setNewProduct({ ...newProduct, unit: e.target.value })}
                     className={`w-full px-3 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-xs text-slate-700 font-bold focus:outline-none cursor-pointer ${modalType === 'view' ? 'opacity-70 cursor-not-allowed' : ''}`}
                   >
-                    <option value="Pcs">Pcs (Pieces)</option>
-                    <option value="Pair">Pair</option>
-                    <option value="Box">Box</option>
-                    <option value="Set">Set</option>
-                    <option value="Gram">Gram</option>
+                    <option value="Pcs">Pcs</option>
+                    <option value="Feet">Feet</option>
                   </select>
                 </div>
               </div>
@@ -1165,22 +1142,11 @@ export const ProductManagement = () => {
                   />
                 </div>
 
-                {/* SKU */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">SKU Barcode *</label>
-                  <input
-                    type="text"
-                    required
-                    value={newVariant.sku}
-                    onChange={(e) => setNewVariant({ ...newVariant, sku: e.target.value })}
-                    placeholder="e.g. SKU-RED-L"
-                    className="w-full px-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all"
-                  />
-                </div>
 
-                {/* Quantity */}
+
+                {/* Quantity / Feet */}
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Quantity *</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Quantity / Feet *</label>
                   <input
                     type="number"
                     required
@@ -1203,17 +1169,7 @@ export const ProductManagement = () => {
                   />
                 </div>
 
-                {/* Wholesale Price */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Wholesale Price (₹)</label>
-                  <input
-                    type="number"
-                    value={newVariant.wholesalePrice === 0 ? '' : newVariant.wholesalePrice}
-                    onKeyDown={preventInvalidNumberInput}
-                    onChange={(e) => setNewVariant({ ...newVariant, wholesalePrice: e.target.value })}
-                    className="w-full px-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all"
-                  />
-                </div>
+
 
                 {/* Variant Height (inches) */}
                 <div className="space-y-1.5">

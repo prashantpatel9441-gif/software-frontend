@@ -10,14 +10,14 @@ const ProductManagement = lazy(() => import('./pages/ProductManagement'));
 const Categories = lazy(() => import('./pages/Categories'));
 const Collections = lazy(() => import('./pages/Collections'));
 const Variants = lazy(() => import('./pages/Variants'));
-const Inventory = lazy(() => import('./pages/Inventory').then(module => ({ default: module.Inventory })));
+const Inventory = lazy(() => import('./pages/Inventory'));
 const Reports = lazy(() => import('./pages/Reports'));
 const Drafts = lazy(() => import('./pages/Drafts'));
 const Login = lazy(() => import('./pages/Login'));
-const Customers = lazy(() => import('./pages/Customers').then(module => ({ default: module.Customers })));
-const CustomerProfile = lazy(() => import('./pages/CustomerProfile').then(module => ({ default: module.CustomerProfile })));
-const Users = lazy(() => import('./pages/Users').then(module => ({ default: module.Users })));
-const Settings = lazy(() => import('./pages/Settings').then(module => ({ default: module.Settings })));
+const Customers = lazy(() => import('./pages/Customers'));
+const CustomerProfile = lazy(() => import('./pages/CustomerProfile'));
+const Users = lazy(() => import('./pages/Users'));
+const Settings = lazy(() => import('./pages/Settings'));
 
 const SuspenseFallback = () => (
   <div className="flex items-center justify-center min-h-screen bg-slate-50">
@@ -34,16 +34,17 @@ const RouteChangeTracker = () => {
 };
 
 const ProtectedRoute = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'));
+  const token = localStorage.getItem('token');
+  const navigate = useNavigate();
   
-  if (!isAuthenticated) {
+  if (!token) {
     return <Navigate to="/login" replace />;
   }
   
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    setIsAuthenticated(false);
+    navigate('/login', { replace: true });
   };
   
   return (
@@ -76,8 +77,6 @@ const SalesOrderWrapper = () => {
 
 const DraftsWrapper = () => {
   const navigate = useNavigate();
-  // Instead of passing a complex object, we can use state through navigation
-  // For simplicity, we navigate to billing. If they need state, we use navigate('/billing', { state: { draftData: draft } })
   const handleEditDraft = (draft) => {
     navigate('/billing', { state: { draftData: draft } });
   };
@@ -128,6 +127,14 @@ const NewBillingWrapper = () => {
 
 const LoginWrapper = () => {
   const navigate = useNavigate();
+  const token = localStorage.getItem('token');
+
+  useEffect(() => {
+    if (token) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [token, navigate]);
+
   return <Login onLoginSuccess={() => navigate('/dashboard')} />;
 };
 

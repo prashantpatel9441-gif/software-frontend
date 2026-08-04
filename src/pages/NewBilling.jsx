@@ -88,7 +88,7 @@ const ProductSearch = ({ item, productList, onSelect, onChange }) => {
         )}
       </div>
       {isOpen && search && filtered.length > 0 && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+        <div className="absolute z-[9999] w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
           {filtered.map((p, index) => (
             <div
               key={p._id}
@@ -132,14 +132,16 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
   const [notes, setNotes] = useState('');
 
   const [items, setItems] = useState([
-    { id: Date.now(), product: '', variant: '', qty: 1, height: 0, width: 0, sqftPerPcs: 0, totalSqft: 0, price: 0, disc: 0, tax: 0 }
+    { id: Date.now(), product: '', variant: '', unit: 'Pcs', qty: 1, height: 0, width: 0, sqftPerPcs: 0, totalSqft: 0, pricePerSqft: 0, price: 0, disc: 0, tax: 0 }
   ]);
 
 
   const [amountReceived, setAmountReceived] = useState(0);
+  const [otherCharge, setOtherCharge] = useState(0);
+  const [roundOff, setRoundOff] = useState(0);
   const [paymentStatus, setPaymentStatus] = useState('Pending (Credit)');
   const [paymentMethod, setPaymentMethod] = useState('Cash');
-  const [summary, setSummary] = useState({ subtotal: 0, discount: 0, tax: 0, grandTotal: 0, pendingBalance: 0 });
+  const [summary, setSummary] = useState({ subtotal: 0, discount: 0, tax: 0, otherCharge: 0, roundOff: 0, grandTotal: 0, pendingBalance: 0 });
   const [invoiceId, setInvoiceId] = useState('');
   const [productList, setProductList] = useState([]);
   const [priceHints, setPriceHints] = useState({});
@@ -241,6 +243,8 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
       setPaymentMethod(draftData.paymentMethod || 'Cash');
       setPaymentStatus(draftData.paymentStatus || 'Pending (Credit)');
       setAmountReceived(draftData.amountReceived || 0);
+      setOtherCharge(draftData.otherCharge || 0);
+      setRoundOff(draftData.roundOff || 0);
       setInvoiceId(draftData.id || draftData.invoiceId || '');
       setInvoiceType(draftData.invoiceType || '');
       setDocumentNumber(draftData.documentNumber || '');
@@ -327,16 +331,20 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
   useEffect(() => {
     let subtotal = 0, discount = 0, tax = 0;
     items.forEach(item => {
-      const qty = parseFloat(item.qty) || 0, price = parseFloat(item.price) || 0;
+      const sqft = parseFloat(item.totalSqft) || 0;
+      const pricePerSqft = parseFloat(item.pricePerSqft) || 0;
       const disc = parseFloat(item.disc) || 0, taxPct = parseFloat(item.tax) || 0;
-      const sub = qty * price;
-      const d = sub * (disc / 100);
-      const t = (sub - d) * (taxPct / 100);
-      subtotal += sub; discount += d; tax += t;
+      // If product has sqft, use sqft-based pricing; else fall back to qty*price
+      const linePrice = sqft > 0 && pricePerSqft > 0 ? sqft * pricePerSqft : (parseFloat(item.qty) || 0) * (parseFloat(item.price) || 0);
+      const d = linePrice * (disc / 100);
+      const t = (linePrice - d) * (taxPct / 100);
+      subtotal += linePrice; discount += d; tax += t;
     });
-    const grandTotal = subtotal - discount + tax;
-    setSummary({ subtotal, discount, tax, grandTotal, pendingBalance: Math.max(0, grandTotal - (parseFloat(amountReceived) || 0)) });
-  }, [items, amountReceived]);
+    const oc = parseFloat(otherCharge) || 0;
+    const ro = parseFloat(roundOff) || 0;
+    const grandTotal = subtotal - discount + tax + oc + ro;
+    setSummary({ subtotal, discount, tax, otherCharge: oc, roundOff: ro, grandTotal, pendingBalance: Math.max(0, grandTotal - (parseFloat(amountReceived) || 0)) });
+  }, [items, amountReceived, otherCharge, roundOff]);
 
   // ── Update price hints when customer or product changes ────
   const updatePriceHint = async (itemId, productName) => {
@@ -363,7 +371,7 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
 
   // ── Item handlers ──────────────────────────────────────────
   // ── Item handlers ──────────────────────────────────────────
-  const handleAddItemRow = () => setItems([...items, { id: Date.now(), product: '', variant: '', qty: 1, height: 0, width: 0, sqftPerPcs: 0, totalSqft: 0, price: 0, disc: 0, tax: 0 }]);
+  const handleAddItemRow = () => setItems([...items, { id: Date.now(), product: '', variant: '', unit: 'Pcs', qty: 1, height: 0, width: 0, sqftPerPcs: 0, totalSqft: 0, pricePerSqft: 0, price: 0, disc: 0, tax: 0 }]);
   const handleRemoveItemRow = (id) => { if (items.length > 1) setItems(items.filter(i => i.id !== id)); };
   const preventInvalidNumberInput = (e) => { if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault(); };
 
@@ -371,7 +379,7 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
     setItems(prev => prev.map(item => {
       if (item.id !== id) return item;
       let update = { [field]: value };
-      
+
       if (field === 'variant') {
         const found = productList.find(p => p.name === item.product);
         if (found) {
@@ -380,17 +388,10 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
             const vd = found.variantDetails.find(v => v.variantName === value);
             if (vd) {
               if (vd.retailPrice) price = vd.retailPrice;
-              if (vd.height > 0 && vd.width > 0) {
-                h = vd.height;
-                w = vd.width;
-              }
+              if (vd.height > 0 && vd.width > 0) { h = vd.height; w = vd.width; }
             }
           }
-          // Fallback to main product height and width if variant has no height/width
-          if (h === 0 || w === 0) {
-            h = found.height || 0;
-            w = found.width || 0;
-          }
+          if (h === 0 || w === 0) { h = found.height || 0; w = found.width || 0; }
           update.price = price;
           update.height = h;
           update.width = w;
@@ -400,15 +401,37 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
       const nextItem = { ...item, ...update };
       const h = parseFloat(nextItem.height) || 0;
       const w = parseFloat(nextItem.width) || 0;
-      const q = parseFloat(nextItem.qty) || 0;
+      let q = parseFloat(nextItem.qty) || 0;
+      const unit = nextItem.unit || 'Pcs';
 
       const sqftPerPcs = (h > 0 && w > 0) ? (h * w) / 144 : 0;
-      const totalSqft = q * sqftPerPcs;
+
+      let totalSqft = field === 'totalSqft' ? (parseFloat(value) || 0) : q * sqftPerPcs;
+
+      // If unit is 'Feet' and product has no specific HxW dimensions, totalSqft matches qty (Feet)
+      if (unit === 'Feet' && sqftPerPcs === 0) {
+        if (field === 'qty') {
+          totalSqft = q;
+        } else if (field === 'totalSqft') {
+          q = totalSqft;
+          update.qty = q;
+        }
+      }
+
+      let pricePerSqft = field === 'pricePerSqft' ? (parseFloat(value) || 0) : (parseFloat(nextItem.pricePerSqft) || 0);
+      if (unit === 'Feet' && pricePerSqft === 0 && nextItem.price > 0) {
+        pricePerSqft = parseFloat(nextItem.price) || 0;
+      }
+
+      const computedPrice = totalSqft > 0 && pricePerSqft > 0 ? parseFloat((totalSqft * pricePerSqft).toFixed(2)) : (parseFloat(nextItem.price) || 0);
 
       return {
         ...nextItem,
+        qty: q,
         sqftPerPcs: parseFloat(sqftPerPcs.toFixed(4)),
         totalSqft: parseFloat(totalSqft.toFixed(4)),
+        pricePerSqft,
+        price: computedPrice,
       };
     }));
   };
@@ -418,7 +441,6 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
   const handleProductSelect = async (id, productName) => {
     const found = productList.find(p => p.name === productName);
 
-    // Check customer-specific price first
     let price = 0;
     if (selectedCustomer && productName) {
       try {
@@ -435,6 +457,7 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
       price = found.retailPrice;
     }
 
+    const unit = found?.unit || 'Pcs';
     const h = found?.height || 0;
     const w = found?.width || 0;
     const sqftPerPcs = (h > 0 && w > 0) ? (h * w) / 144 : (found?.sqftPerPcs || 0);
@@ -442,12 +465,23 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
     setItems(items.map(item => {
       if (item.id !== id) return item;
       const q = parseFloat(item.qty) || 1;
-      const totalSqft = q * sqftPerPcs;
+      let totalSqft = q * sqftPerPcs;
+
+      // If selling unit is Feet and product has no HxW dimensions, set totalSqft to qty directly
+      if (unit === 'Feet' && totalSqft === 0) {
+        totalSqft = q;
+      }
+
+      let pricePerSqft = item.pricePerSqft || (unit === 'Feet' ? price : 0);
+      const computedPrice = totalSqft > 0 && pricePerSqft > 0 ? parseFloat((totalSqft * pricePerSqft).toFixed(2)) : price;
+
       return {
         ...item,
         product: productName,
         variant: '',
-        price,
+        unit,
+        price: computedPrice,
+        pricePerSqft,
         height: h,
         width: w,
         sqftPerPcs: parseFloat(sqftPerPcs.toFixed(4)),
@@ -492,23 +526,32 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
       issueDate: issueDate ? new Date(issueDate) : new Date(),
       payment: calculatedPayment,
       delivery: 'Processing',
-      items: items.filter(i => i.product.trim()).map(i => ({
-        product: i.product.trim(),
-        variant: i.variant || '',
-        qty: parseInt(i.qty) || 0,
-        height: parseFloat(i.height) || 0,
-        width: parseFloat(i.width) || 0,
-        sqftPerPcs: parseFloat(i.sqftPerPcs) || 0,
-        totalSqft: parseFloat(i.totalSqft) || 0,
-        price: parseFloat(i.price) || 0,
-        disc: parseFloat(i.disc) || 0,
-        tax: parseFloat(i.tax) || 0,
-        total: (parseInt(i.qty) || 0) * (parseFloat(i.price) || 0) * (1 - (parseFloat(i.disc) || 0) / 100),
-      })),
+      items: items.filter(i => i.product.trim()).map(i => {
+        const sqft = parseFloat(i.totalSqft) || 0;
+        const pricePerSqft = parseFloat(i.pricePerSqft) || 0;
+        const linePrice = sqft > 0 && pricePerSqft > 0 ? sqft * pricePerSqft : (parseInt(i.qty) || 0) * (parseFloat(i.price) || 0);
+        return {
+          product: i.product.trim(),
+          variant: i.variant || '',
+          unit: i.unit || 'Pcs',
+          qty: parseInt(i.qty) || 0,
+          height: parseFloat(i.height) || 0,
+          width: parseFloat(i.width) || 0,
+          sqftPerPcs: parseFloat(i.sqftPerPcs) || 0,
+          totalSqft: sqft,
+          pricePerSqft,
+          price: parseFloat(i.price) || 0,
+          disc: parseFloat(i.disc) || 0,
+          tax: parseFloat(i.tax) || 0,
+          total: linePrice * (1 - (parseFloat(i.disc) || 0) / 100),
+        };
+      }),
 
       subtotal: summary.subtotal,
       discount: summary.discount,
       tax: summary.tax,
+      otherCharge: parseFloat(otherCharge) || 0,
+      roundOff: parseFloat(roundOff) || 0,
       grandTotal: summary.grandTotal,
       amountReceived: parseFloat(amountReceived) || 0,
       paymentStatus: overrideStatus === 'Draft' ? 'Draft' : paymentStatus,
@@ -630,8 +673,8 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
 
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left */}
-        <div className="lg:col-span-2 space-y-6">
+        {/* Top: Bill Settings + Customer — full width */}
+        <div className="lg:col-span-3 space-y-6">
 
           {/* Bill Settings Card */}
           <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
@@ -780,41 +823,52 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
               <textarea rows="2" maxLength={200} value={billingAddress} onChange={e => setBillingAddress(e.target.value)} placeholder="Full address..." className={inputClass} />
             </div>
           </div>
+        </div>
 
-          {/* Order Items Card */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+        {/* Order Items — full width row */}
+        <div className="lg:col-span-3 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
             <h3 className="font-bold text-slate-800 text-base border-b border-slate-50 pb-3">Order Items</h3>
             <div className="overflow-visible">
-              <table className="w-full text-left text-xs min-w-[600px]">
+              <table className="w-full text-left text-xs" style={{minWidth:'900px'}}>
                 <thead>
                   <tr className="text-slate-400 font-bold uppercase tracking-wider border-b border-slate-100">
-                    <th className="pb-3 w-[34%]">Product</th>
-                    <th className="pb-3 w-[22%]">Variant</th>
-                    <th className="pb-3 w-[14%]">QTY</th>
-                    <th className="pb-3 w-[18%]">Price (₹/pcs)</th>
-                    <th className="pb-3 w-[8%]">Tax %</th>
-                    <th className="pb-3 w-[4%]"></th>
+                    <th className="pb-3 w-[24%]">Product</th>
+                    <th className="pb-3 w-[14%]">Variant</th>
+                    <th className="pb-3 w-[7%] text-center">Unit</th>
+                    <th className="pb-3 w-[7%] text-center">QTY</th>
+                    <th className="pb-3 w-[12%] text-center">Sq.Ft / Feet</th>
+                    <th className="pb-3 w-[13%] text-right">Price/Sq.Ft (₹)</th>
+                    <th className="pb-3 w-[10%] text-right">Amount (₹)</th>
+                    <th className="pb-3 w-[7%] text-center">Tax %</th>
+                    <th className="pb-3 w-[2%]"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50 font-semibold">
                   {items.map((item) => {
                     const hint = priceHints[item.id];
+                    const lineAmt = item.totalSqft > 0 && item.pricePerSqft > 0
+                      ? (item.totalSqft * item.pricePerSqft)
+                      : ((parseFloat(item.qty) || 0) * (parseFloat(item.price) || 0));
                     return (
                       <tr key={item.id}>
+                        {/* Product */}
                         <td className="py-3 pr-2 align-top">
-                          <ProductSearch 
-                            item={item} 
-                            productList={productList} 
+                          <ProductSearch
+                            item={item}
+                            productList={productList}
                             onChange={(val) => handleItemChange(item.id, 'product', val)}
-                            onSelect={(val) => handleProductSelect(item.id, val)} 
+                            onSelect={(val) => handleProductSelect(item.id, val)}
                           />
-                          {item.height > 0 && item.width > 0 && (
-                            <div className="mt-1 text-[10px] text-slate-500 font-semibold flex items-center gap-1.5 flex-wrap">
-                              <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono font-bold">Size: {item.height}" × {item.width}"</span>
-                              <span className="text-emerald-700 font-bold">({item.sqftPerPcs.toFixed(2)} Sq.Ft/pcs)</span>
-                            </div>
-                          )}
+                          <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                            {item.unit === 'Feet' && (
+                              <span className="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.5 rounded font-bold">Unit: Feet</span>
+                            )}
+                            {item.height > 0 && item.width > 0 && (
+                              <span className="bg-slate-100 text-slate-600 text-[10px] px-1.5 py-0.5 rounded font-mono font-bold">{item.height}" × {item.width}" ({item.sqftPerPcs.toFixed(3)} ft²/pcs)</span>
+                            )}
+                          </div>
                         </td>
+                        {/* Variant */}
                         <td className="py-3 pr-2 align-top">
                           {(() => {
                             const prod = productList.find(p => p.name === item.product);
@@ -837,36 +891,71 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
                             return <select disabled className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded-lg text-[11px] opacity-40 cursor-not-allowed"><option>No Variants</option></select>;
                           })()}
                         </td>
+                        {/* Unit Selector */}
+                        <td className="py-3 pr-2 align-top">
+                          <select
+                            value={item.unit || 'Pcs'}
+                            onChange={e => handleItemChange(item.id, 'unit', e.target.value)}
+                            className="w-full px-2 py-2 bg-slate-50/50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 text-[11px] font-bold text-slate-700 cursor-pointer">
+                            <option value="Pcs">Pcs</option>
+                            <option value="Feet">Feet</option>
+                          </select>
+                        </td>
+                        {/* QTY */}
                         <td className="py-3 pr-2 align-top">
                           <input type="number" min="1" value={item.qty === 0 ? '' : item.qty}
                             onChange={e => handleItemChange(item.id, 'qty', e.target.value)} onKeyDown={preventInvalidNumberInput}
-                            className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded-lg focus:outline-none text-center" />
-                          {item.totalSqft > 0 && (
-                            <div className="mt-1 text-[10px] text-emerald-700 font-extrabold tracking-tight bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/60 text-center" title={`${item.sqftPerPcs.toFixed(2)} Sq.Ft/pcs`}>
-                              {item.totalSqft.toLocaleString('en-IN', { maximumFractionDigits: 2 })} Sq.Ft
-                            </div>
+                            className="w-full px-2 py-2 bg-slate-50/50 border border-slate-200 rounded-lg focus:outline-none text-center" />
+                          {item.unit === 'Feet' && (
+                            <div className="mt-1 text-[9px] text-emerald-600 font-bold text-center">Feet</div>
                           )}
                         </td>
+                        {/* Sq.Ft / Feet — editable */}
                         <td className="py-3 pr-2 align-top">
-                          <input type="number" min="0" value={item.price === 0 ? '' : item.price}
-                            onChange={e => handleItemChange(item.id, 'price', e.target.value)} onKeyDown={preventInvalidNumberInput}
-                            className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded-lg focus:outline-none text-right" />
-                          {/* Price Hint */}
+                          <input
+                            type="number" min="0" step="0.01"
+                            value={item.totalSqft === 0 ? '' : item.totalSqft}
+                            onChange={e => handleItemChange(item.id, 'totalSqft', e.target.value)}
+                            onKeyDown={preventInvalidNumberInput}
+                            placeholder="0.00"
+                            className="w-full px-2 py-2 bg-emerald-50/60 border border-emerald-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-400/20 focus:border-emerald-400 text-center text-emerald-800 font-bold" />
+                          {item.sqftPerPcs > 0 ? (
+                            <div className="mt-1 text-[9px] text-slate-400 text-center">{item.sqftPerPcs.toFixed(3)} ft²/pcs</div>
+                          ) : item.unit === 'Feet' ? (
+                            <div className="mt-1 text-[9px] text-emerald-700 font-bold text-center">Total Feet</div>
+                          ) : null}
+                        </td>
+                        {/* Price per Sq.Ft */}
+                        <td className="py-3 pr-2 align-top">
+                          <input
+                            type="number" min="0" step="0.01"
+                            value={item.pricePerSqft === 0 ? '' : item.pricePerSqft}
+                            onChange={e => handleItemChange(item.id, 'pricePerSqft', e.target.value)}
+                            onKeyDown={preventInvalidNumberInput}
+                            placeholder="0.00"
+                            className="w-full px-2 py-2 bg-slate-50/50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 text-right" />
                           {hint && (
                             <div className="mt-1 px-1 space-y-0.5">
-                              <p className="text-[9px] text-emerald-600 font-bold flex items-center gap-1">
+                              <p className="text-[9px] text-emerald-600 font-bold flex items-center gap-1 justify-end">
                                 <Clock className="w-2.5 h-2.5" /> Last: ₹{hint.lastPrice}
                               </p>
-                              <p className="text-[9px] text-slate-400 font-medium">Avg: ₹{hint.avgPrice?.toFixed(0)}</p>
                             </div>
                           )}
                         </td>
+                        {/* Line Amount (read-only) */}
+                        <td className="py-3 pr-2 align-top">
+                          <div className="w-full px-2 py-2 bg-slate-100 border border-slate-200 rounded-lg text-right text-slate-800 font-extrabold">
+                            ₹{lineAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </td>
+                        {/* Tax % */}
                         <td className="py-3 pr-2 align-top">
                           <select value={item.tax} onChange={e => handleItemChange(item.id, 'tax', parseInt(e.target.value) || 0)}
-                            className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded-lg focus:outline-none cursor-pointer">
+                            className="w-full px-2 py-2 bg-slate-50/50 border border-slate-200 rounded-lg focus:outline-none cursor-pointer text-center">
                             {[0, 5, 12, 18, 28].map(r => <option key={r} value={r}>{r}%</option>)}
                           </select>
                         </td>
+                        {/* Delete */}
                         <td className="py-3 text-right align-top">
                           <button type="button" onClick={() => handleRemoveItemRow(item.id)} disabled={items.length === 1}
                             className={`p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer ${items.length === 1 ? 'opacity-40 cursor-not-allowed' : ''}`}>
@@ -880,17 +969,15 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
               </table>
             </div>
 
-
             <button type="button" onClick={handleAddItemRow}
               className="w-full py-3 border border-dashed border-slate-200 hover:border-emerald-500 rounded-xl flex items-center justify-center space-x-1.5 text-xs text-slate-500 hover:text-emerald-600 font-bold transition-all bg-slate-50/20 hover:bg-emerald-50/10 cursor-pointer">
               <Plus className="w-4 h-4" /><span>Add Another Row</span>
             </button>
-          </div>
         </div>
 
-        {/* Right: Payment Summary */}
-        <div className="space-y-6">
-          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-5">
+        {/* Bottom: Payment Summary + Notes — full width 2-col row */}
+        <div className="lg:col-span-3 grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-5">
             <h3 className="font-bold text-slate-800 text-base border-b border-slate-50 pb-3">Payment Summary</h3>
             <div className="space-y-3.5 text-xs font-semibold text-slate-600">
               <div className="flex justify-between items-center">
@@ -907,11 +994,37 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
                 <span>Estimated Tax (GST)</span>
                 <span className="text-slate-800 font-bold">+ ₹{summary.tax.toFixed(2)}</span>
               </div>
+
+              {/* Other Charge & Round Off Inputs */}
+              <div className="pt-2 border-t border-slate-100 space-y-2">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-semibold text-slate-600">Other Charge (₹)</span>
+                  <input type="number" min="0" step="0.01" value={otherCharge === 0 ? '' : otherCharge}
+                    onChange={e => setOtherCharge(e.target.value)} onKeyDown={preventInvalidNumberInput} placeholder="0.00"
+                    className="w-28 px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-right font-bold text-slate-800 focus:outline-none focus:border-emerald-500" />
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-600">Round Off (₹)</span>
+                    <button type="button" onClick={() => {
+                      const raw = summary.subtotal - summary.discount + summary.tax + (parseFloat(otherCharge) || 0);
+                      const rounded = Math.round(raw);
+                      const diff = parseFloat((rounded - raw).toFixed(2));
+                      setRoundOff(diff);
+                    }} className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold hover:bg-emerald-200 transition-colors cursor-pointer" title="Auto round off to nearest integer">
+                      Auto
+                    </button>
+                  </div>
+                  <input type="number" step="0.01" value={roundOff === 0 ? '' : roundOff}
+                    onChange={e => setRoundOff(e.target.value)} placeholder="0.00"
+                    className="w-28 px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-right font-bold text-slate-800 focus:outline-none focus:border-emerald-500" />
+                </div>
+              </div>
+
               <div className="border-t border-slate-100 pt-3 flex justify-between items-center text-sm">
                 <span className="font-bold text-slate-800">Grand Total</span>
                 <span className="text-base font-extrabold text-slate-900">₹{summary.grandTotal.toFixed(2)}</span>
               </div>
-
             </div>
 
             <div className="space-y-1.5 pt-2 border-t border-slate-100">
@@ -928,7 +1041,15 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
 
             <div className="space-y-1.5">
               <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Payment Status</label>
-              <select value={paymentStatus} onChange={e => setPaymentStatus(e.target.value)}
+              <select value={paymentStatus} onChange={e => {
+                const newStatus = e.target.value;
+                setPaymentStatus(newStatus);
+                if (newStatus === 'Paid') {
+                  setAmountReceived(summary.grandTotal);
+                } else {
+                  setAmountReceived(0);
+                }
+              }}
                 className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded-xl text-xs text-slate-700 font-semibold focus:outline-none cursor-pointer">
                 <option value="Pending (Credit)">Pending (Credit)</option>
                 <option value="Paid">Paid</option>
@@ -945,7 +1066,7 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+          <div className="lg:col-span-1 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
             <h3 className="font-bold text-slate-800 text-base border-b border-slate-50 pb-3">Notes &amp; Terms</h3>
             <textarea rows="3" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Add terms and conditions..." className={inputClass} />
           </div>
