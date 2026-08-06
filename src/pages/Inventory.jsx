@@ -1037,6 +1037,7 @@ export const Inventory = () => {
                     type="number"
                     required
                     min="0"
+                    step="any"
                     value={itemForm.quantity === 0 ? '' : itemForm.quantity}
                     onKeyDown={preventInvalidNumberInput}
                     onChange={(e) => setItemForm({ ...itemForm, quantity: e.target.value })}
@@ -1052,6 +1053,7 @@ export const Inventory = () => {
                     type="number"
                     required
                     min="0"
+                    step="any"
                     value={itemForm.unitPrice === 0 ? '' : itemForm.unitPrice}
                     onKeyDown={preventInvalidNumberInput}
                     onChange={(e) => setItemForm({ ...itemForm, unitPrice: e.target.value })}

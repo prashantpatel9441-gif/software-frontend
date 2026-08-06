@@ -1007,6 +1007,7 @@ export const ProductManagement = () => {
                   <input
                     type="number"
                     min="0"
+                    step="any"
                     disabled={modalType === 'view'}
                     value={newProduct.height === 0 ? '' : newProduct.height}
                     onKeyDown={preventInvalidNumberInput}
@@ -1022,6 +1023,7 @@ export const ProductManagement = () => {
                   <input
                     type="number"
                     min="0"
+                    step="any"
                     disabled={modalType === 'view'}
                     value={newProduct.width === 0 ? '' : newProduct.width}
                     onKeyDown={preventInvalidNumberInput}
@@ -1177,6 +1179,7 @@ export const ProductManagement = () => {
                   <input
                     type="number"
                     min="0"
+                    step="any"
                     value={newVariant.height === 0 ? '' : newVariant.height}
                     onKeyDown={preventInvalidNumberInput}
                     onChange={(e) => setNewVariant({ ...newVariant, height: e.target.value })}
@@ -1191,6 +1194,7 @@ export const ProductManagement = () => {
                   <input
                     type="number"
                     min="0"
+                    step="any"
                     value={newVariant.width === 0 ? '' : newVariant.width}
                     onKeyDown={preventInvalidNumberInput}
                     onChange={(e) => setNewVariant({ ...newVariant, width: e.target.value })}

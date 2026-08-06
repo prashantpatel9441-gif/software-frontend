@@ -513,8 +513,8 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
           <div style="font-size: 11px;">${formattedNotes}</div>
         </div>
       </td>
-      <td style="width: 50%; padding-left: 10px; display: flex; flex-direction: column; justify-content: flex-end;">
-        <div class="sign-box" style="margin-top: auto;">
+      <td style="width: 50%; padding-left: 10px; vertical-align: bottom; text-align: right;">
+        <div class="sign-box" style="display: inline-block; text-align: center;">
           <div style="margin-bottom: 40px; font-weight: normal;">For ${compName}</div>
           <div>Authorised Signatory</div>
         </div>
