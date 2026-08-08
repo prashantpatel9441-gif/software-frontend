@@ -156,7 +156,7 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
     return matchesSearch && matchesAllFilters;
   });
 
-  const fmt = (n) => n ? '₹' + n.toLocaleString('en-IN') : '—';
+  const fmt = (n) => n ? '₹' + Number(n).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—';
 
   const deliverySteps = ['Processing', 'Dispatched', 'Delivered', 'Cancelled'];
 
@@ -204,7 +204,7 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
     if (!editingInvoice) return;
     setSaving(true);
     try {
-      const amountReceived = parseFloat(editForm.amountReceived) || 0;
+      const amountReceived = parseFloat(parseFloat(editForm.amountReceived).toFixed(2)) || 0;
       const grandTotal = editingInvoice.total || 0;
       const pendingAmt = Math.max(0, grandTotal - amountReceived);
       
@@ -328,8 +328,8 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
           </td>
           <td style="border-right: 1px solid #000; padding:4px 8px; text-align:center;">${qtyCell}</td>
           <td style="border-right: 1px solid #000; padding:4px 8px; text-align:center;">${feetCell}</td>
-          <td style="border-right: 1px solid #000; padding:4px 8px; text-align:right;">Rs. ${(item.pricePerSqft > 0 ? item.pricePerSqft : (item.price || 0)).toLocaleString('en-IN', {minimumFractionDigits:2})}</td>
-          <td style="padding:4px 8px; text-align:right;">Rs. ${(item.total || (item.qty * (item.price || 0))).toLocaleString('en-IN', {minimumFractionDigits:2})}</td>
+          <td style="border-right: 1px solid #000; padding:4px 8px; text-align:right;">Rs. ${(item.pricePerSqft > 0 ? item.pricePerSqft : (item.price || 0)).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+          <td style="padding:4px 8px; text-align:right;">Rs. ${(item.total || (item.qty * (item.price || 0))).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
         </tr>
       `;
     });
@@ -473,22 +473,22 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
       <tr>
         <td colspan="4" style="border-top: 1px solid #000; border-right: 1px solid #000;"></td>
         <td class="summary-label" style="border-top: 1px solid #000;">Sub Total :</td>
-        <td class="summary-val" style="border-top: 1px solid #000;">Rs. ${(detail.subtotal || 0).toLocaleString('en-IN', {minimumFractionDigits:2})}</td>
+        <td class="summary-val" style="border-top: 1px solid #000;">Rs. ${(detail.subtotal || 0).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
       </tr>
       <tr>
         <td colspan="4" style="border-right: 1px solid #000;"></td>
         <td class="summary-label">Other Charge :</td>
-        <td class="summary-val">Rs. ${(detail.otherCharge || 0).toLocaleString('en-IN', {minimumFractionDigits:2})}</td>
+        <td class="summary-val">Rs. ${(detail.otherCharge || 0).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
       </tr>
       <tr>
         <td colspan="4" style="border-right: 1px solid #000;"></td>
         <td class="summary-label">Round Off :</td>
-        <td class="summary-val">Rs. ${(detail.roundOff || 0).toLocaleString('en-IN', {minimumFractionDigits:2})}</td>
+        <td class="summary-val">Rs. ${(detail.roundOff || 0).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
       </tr>
       <tr>
         <td colspan="4" style="border-right: 1px solid #000;"></td>
         <td class="summary-label" style="font-weight: bold;">Total :</td>
-        <td class="summary-val">Rs. ${(detail.grandTotal || 0).toLocaleString('en-IN', {minimumFractionDigits:2})}</td>
+        <td class="summary-val">Rs. ${(detail.grandTotal || 0).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
       </tr>
       <tr>
         <td colspan="6" class="words-row">

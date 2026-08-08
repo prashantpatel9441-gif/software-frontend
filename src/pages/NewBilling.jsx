@@ -342,8 +342,17 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
     });
     const oc = parseFloat(otherCharge) || 0;
     const ro = parseFloat(roundOff) || 0;
-    const grandTotal = subtotal - discount + tax + oc + ro;
-    setSummary({ subtotal, discount, tax, otherCharge: oc, roundOff: ro, grandTotal, pendingBalance: Math.max(0, grandTotal - (parseFloat(amountReceived) || 0)) });
+    const grandTotal = parseFloat((subtotal - discount + tax + oc + ro).toFixed(2));
+    const pendingBalance = parseFloat(Math.max(0, grandTotal - (parseFloat(amountReceived) || 0)).toFixed(2));
+    setSummary({ 
+      subtotal: parseFloat(subtotal.toFixed(2)), 
+      discount: parseFloat(discount.toFixed(2)), 
+      tax: parseFloat(tax.toFixed(2)), 
+      otherCharge: oc, 
+      roundOff: ro, 
+      grandTotal, 
+      pendingBalance 
+    });
   }, [items, amountReceived, otherCharge, roundOff]);
 
   // ── Update price hints when customer or product changes ────
@@ -428,8 +437,8 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
       return {
         ...nextItem,
         qty: q,
-        sqftPerPcs: parseFloat(sqftPerPcs.toFixed(4)),
-        totalSqft: parseFloat(totalSqft.toFixed(4)),
+        sqftPerPcs: parseFloat(sqftPerPcs.toFixed(2)),
+        totalSqft: parseFloat(totalSqft.toFixed(2)),
         pricePerSqft,
         price: computedPrice,
       };
@@ -484,8 +493,8 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
         pricePerSqft,
         height: h,
         width: w,
-        sqftPerPcs: parseFloat(sqftPerPcs.toFixed(4)),
-        totalSqft: parseFloat(totalSqft.toFixed(4)),
+        sqftPerPcs: parseFloat(sqftPerPcs.toFixed(2)),
+        totalSqft: parseFloat(totalSqft.toFixed(2)),
       };
     }));
     await updatePriceHint(id, productName);
@@ -553,7 +562,7 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
       otherCharge: parseFloat(otherCharge) || 0,
       roundOff: parseFloat(roundOff) || 0,
       grandTotal: summary.grandTotal,
-      amountReceived: parseFloat(amountReceived) || 0,
+      amountReceived: parseFloat(parseFloat(amountReceived).toFixed(2)) || 0,
       paymentStatus: overrideStatus === 'Draft' ? 'Draft' : paymentStatus,
       paymentMethod,
       notes: notes.trim(),
@@ -910,17 +919,17 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
                             <div className="mt-1 text-[9px] text-emerald-600 font-bold text-center">Feet</div>
                           )}
                         </td>
-                        {/* Sq.Ft / Feet — editable */}
+                        {/* Sq.Ft / Feet — calculated (read-only) */}
                         <td className="py-3 pr-2 align-top">
                           <input
-                            type="number" min="0" step="0.01"
+                            type="number"
+                            readOnly
+                            disabled
                             value={item.totalSqft === 0 ? '' : item.totalSqft}
-                            onChange={e => handleItemChange(item.id, 'totalSqft', e.target.value)}
-                            onKeyDown={preventInvalidNumberInput}
                             placeholder="0.00"
-                            className="w-full px-2 py-2 bg-emerald-50/60 border border-emerald-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-400/20 focus:border-emerald-400 text-center text-emerald-800 font-bold" />
+                            className="w-full px-2 py-2 bg-slate-100 border border-slate-200 rounded-lg text-center text-slate-500 font-bold cursor-not-allowed outline-none" />
                           {item.sqftPerPcs > 0 ? (
-                            <div className="mt-1 text-[9px] text-slate-400 text-center">{item.sqftPerPcs.toFixed(3)} ft²/pcs</div>
+                            <div className="mt-1 text-[9px] text-slate-400 text-center">{item.sqftPerPcs.toFixed(2)} ft²/pcs</div>
                           ) : item.unit === 'Feet' ? (
                             <div className="mt-1 text-[9px] text-emerald-700 font-bold text-center">Total Feet</div>
                           ) : null}
