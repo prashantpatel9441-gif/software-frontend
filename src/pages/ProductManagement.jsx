@@ -1001,22 +1001,6 @@ export const ProductManagement = () => {
                   />
                 </div>
 
-                {/* Height (inches) */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Height (inches)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    disabled={modalType === 'view'}
-                    value={newProduct.height === 0 ? '' : newProduct.height}
-                    onKeyDown={preventInvalidNumberInput}
-                    onChange={(e) => setNewProduct({ ...newProduct, height: e.target.value })}
-                    placeholder="e.g. 24"
-                    className={`w-full px-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all ${modalType === 'view' ? 'opacity-70 cursor-not-allowed' : ''}`}
-                  />
-                </div>
-
                 {/* Width (inches) */}
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Width (inches)</label>
@@ -1029,6 +1013,22 @@ export const ProductManagement = () => {
                     onKeyDown={preventInvalidNumberInput}
                     onChange={(e) => setNewProduct({ ...newProduct, width: e.target.value })}
                     placeholder="e.g. 36"
+                    className={`w-full px-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all ${modalType === 'view' ? 'opacity-70 cursor-not-allowed' : ''}`}
+                  />
+                </div>
+
+                {/* Height (inches) */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Height (inches)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    disabled={modalType === 'view'}
+                    value={newProduct.height === 0 ? '' : newProduct.height}
+                    onKeyDown={preventInvalidNumberInput}
+                    onChange={(e) => setNewProduct({ ...newProduct, height: e.target.value })}
+                    placeholder="e.g. 24"
                     className={`w-full px-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all ${modalType === 'view' ? 'opacity-70 cursor-not-allowed' : ''}`}
                   />
                   {parseFloat(newProduct.height) > 0 && parseFloat(newProduct.width) > 0 && (
@@ -1173,21 +1173,6 @@ export const ProductManagement = () => {
 
 
 
-                {/* Variant Height (inches) */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Height (in)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    value={newVariant.height === 0 ? '' : newVariant.height}
-                    onKeyDown={preventInvalidNumberInput}
-                    onChange={(e) => setNewVariant({ ...newVariant, height: e.target.value })}
-                    placeholder="e.g. 24"
-                    className="w-full px-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all"
-                  />
-                </div>
-
                 {/* Variant Width (inches) */}
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Width (in)</label>
@@ -1199,6 +1184,21 @@ export const ProductManagement = () => {
                     onKeyDown={preventInvalidNumberInput}
                     onChange={(e) => setNewVariant({ ...newVariant, width: e.target.value })}
                     placeholder="e.g. 36"
+                    className="w-full px-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all"
+                  />
+                </div>
+
+                {/* Variant Height (inches) */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Height (in)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={newVariant.height === 0 ? '' : newVariant.height}
+                    onKeyDown={preventInvalidNumberInput}
+                    onChange={(e) => setNewVariant({ ...newVariant, height: e.target.value })}
+                    placeholder="e.g. 24"
                     className="w-full px-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all"
                   />
                   {parseFloat(newVariant.height) > 0 && parseFloat(newVariant.width) > 0 && (

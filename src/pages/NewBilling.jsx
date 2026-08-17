@@ -432,7 +432,7 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
         pricePerSqft = parseFloat(nextItem.price) || 0;
       }
 
-      const computedPrice = totalSqft > 0 && pricePerSqft > 0 ? parseFloat((totalSqft * pricePerSqft).toFixed(2)) : (parseFloat(nextItem.price) || 0);
+      const computedPrice = totalSqft > 0 && pricePerSqft > 0 ? parseFloat((totalSqft * pricePerSqft).toFixed(2)) : (pricePerSqft > 0 ? pricePerSqft : (parseFloat(nextItem.price) || 0));
 
       return {
         ...nextItem,
@@ -481,7 +481,7 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
         totalSqft = q;
       }
 
-      let pricePerSqft = item.pricePerSqft || (unit === 'Feet' ? price : 0);
+      let pricePerSqft = price;
       const computedPrice = totalSqft > 0 && pricePerSqft > 0 ? parseFloat((totalSqft * pricePerSqft).toFixed(2)) : price;
 
       return {
