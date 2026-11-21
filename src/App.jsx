@@ -44,6 +44,7 @@ const ProtectedRoute = () => {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('adminUser');
     navigate('/login', { replace: true });
   };
   

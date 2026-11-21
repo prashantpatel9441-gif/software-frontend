@@ -68,7 +68,7 @@ export const Inventory = () => {
   const [itemForm, setItemForm] = useState({
     sku: '',
     name: '',
-    category: 'Necklaces',
+    category: '',
     warehouse: 'Main WH - A1',
     quantity: 0,
     unitPrice: 0,
@@ -265,26 +265,28 @@ export const Inventory = () => {
       const data = await api.get('/inventory', {
         params: { limit: 10000, search: searchTerm, category: selectedCategory, warehouse: selectedWarehouse }
       });
-      const exportData = data.inventory || data;
+      const exportData = data?.inventory || (Array.isArray(data) ? data : []);
       
       const csvRows = [];
       const headers = ['SKU', 'PRODUCT NAME', 'CATEGORY', 'WAREHOUSE', 'QUANTITY', 'UNIT PRICE', 'TOTAL VALUE', 'STATUS'];
       csvRows.push(headers.join(','));
 
       exportData.forEach(item => {
-      const totalValue = item.quantity * item.unitPrice;
-      const values = [
-        `"${item.sku}"`,
-        `"${item.name.replace(/"/g, '""')}"`,
-        `"${item.category}"`,
-        `"${item.warehouse}"`,
-        item.quantity,
-        item.unitPrice,
-        totalValue,
-        `"${item.status}"`
-      ];
-      csvRows.push(values.join(','));
-    });
+        const qty = Number(item.quantity || item.stock || 0);
+        const price = Number(item.unitPrice || item.retailPrice || 0);
+        const totalValue = qty * price;
+        const values = [
+          `"${(item.sku || '').replace(/"/g, '""')}"`,
+          `"${(item.name || item.productName || '').replace(/"/g, '""')}"`,
+          `"${(item.category || '').replace(/"/g, '""')}"`,
+          `"${(item.warehouse || 'Main Warehouse').replace(/"/g, '""')}"`,
+          qty,
+          price,
+          totalValue,
+          `"${(item.status || 'In Stock').replace(/"/g, '""')}"`
+        ];
+        csvRows.push(values.join(','));
+      });
 
     const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);

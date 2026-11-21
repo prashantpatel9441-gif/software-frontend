@@ -89,12 +89,14 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
       if (Array.isArray(data)) {
         setInvoices(data.map(inv => {
           const grandTotal = inv.grandTotal || 0;
+          const prevBal = inv.previousBalance || 0;
+          const netPayable = inv.netPayable || (grandTotal + prevBal);
           const paid = inv.amountReceived || 0;
-          const pending = Math.max(0, grandTotal - paid);
+          const pending = Math.max(0, (netPayable || grandTotal) - paid);
           
           let computedPayment = inv.payment || 'Pending';
           if (computedPayment !== 'Draft') {
-            if (pending < 0.01 && grandTotal > 0) computedPayment = 'Paid';
+            if (pending < 0.01 && (netPayable || grandTotal) > 0) computedPayment = 'Paid';
             else if (paid > 0 && pending >= 0.01 && computedPayment !== 'Overdue') computedPayment = 'Partial';
             else if (paid === 0 && computedPayment !== 'Overdue') computedPayment = 'Pending';
           }
@@ -205,12 +207,12 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
     setSaving(true);
     try {
       const amountReceived = parseFloat(parseFloat(editForm.amountReceived).toFixed(2)) || 0;
-      const grandTotal = editingInvoice.total || 0;
-      const pendingAmt = Math.max(0, grandTotal - amountReceived);
+      const netTotal = editingInvoice.netPayable || editingInvoice.total || 0;
+      const pendingAmt = Math.max(0, netTotal - amountReceived);
       
       let computedPayment = editForm.payment;
       if (computedPayment !== 'Draft') {
-        if (pendingAmt < 0.01 && grandTotal > 0) computedPayment = 'Paid';
+        if (pendingAmt < 0.01 && netTotal > 0) computedPayment = 'Paid';
         else if (amountReceived > 0 && pendingAmt >= 0.01 && computedPayment !== 'Overdue') computedPayment = 'Partial';
         else if (amountReceived === 0 && computedPayment !== 'Overdue') computedPayment = 'Pending';
       }
@@ -232,7 +234,7 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
           paymentMethod: payload.paymentMethod,
           amountReceived: payload.amountReceived,
           paid: payload.amountReceived,
-          pending: Math.max(0, i.total - payload.amountReceived) || null,
+          pending: Math.max(0, (i.netPayable || i.total) - payload.amountReceived) || null,
           notes: payload.notes,
         }
         : i
@@ -336,7 +338,10 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
 
 
 
-    const amountInWords = numberToWords(Math.round(detail.grandTotal || 0));
+    const netPayableValue = detail.netPayable !== undefined && detail.netPayable !== null
+      ? detail.netPayable
+      : ((detail.grandTotal || 0) + (detail.previousBalance || 0));
+    const amountInWords = numberToWords(Math.round(netPayableValue || 0));
 
     // Convert newlines to <br> for terms
     const formattedTerms = terms.split('\n').map(t => `<div>${t}</div>`).join('');
@@ -475,21 +480,45 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
         <td class="summary-label" style="border-top: 1px solid #000;">Sub Total :</td>
         <td class="summary-val" style="border-top: 1px solid #000;">Rs. ${(detail.subtotal || 0).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
       </tr>
+      ${(detail.otherCharge || 0) !== 0 ? `
       <tr>
         <td colspan="4" style="border-right: 1px solid #000;"></td>
         <td class="summary-label">Other Charge :</td>
         <td class="summary-val">Rs. ${(detail.otherCharge || 0).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
-      </tr>
+      </tr>` : ''}
+      ${(detail.roundOff || 0) !== 0 ? `
       <tr>
         <td colspan="4" style="border-right: 1px solid #000;"></td>
         <td class="summary-label">Round Off :</td>
         <td class="summary-val">Rs. ${(detail.roundOff || 0).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+      </tr>` : ''}
+      <tr>
+        <td colspan="4" style="border-right: 1px solid #000;"></td>
+        <td class="summary-label" style="font-weight: bold;">Current Bill Total :</td>
+        <td class="summary-val" style="font-weight: bold;">Rs. ${(detail.grandTotal || 0).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+      </tr>
+      ${(detail.previousBalance || 0) > 0 ? `
+      <tr>
+        <td colspan="4" style="border-right: 1px solid #000;"></td>
+        <td class="summary-label" style="font-weight: bold; color: #b45309;">Previous Balance :</td>
+        <td class="summary-val" style="font-weight: bold; color: #b45309;">Rs. ${(detail.previousBalance || 0).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
       </tr>
       <tr>
         <td colspan="4" style="border-right: 1px solid #000;"></td>
-        <td class="summary-label" style="font-weight: bold;">Total :</td>
-        <td class="summary-val">Rs. ${(detail.grandTotal || 0).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+        <td class="summary-label" style="font-weight: bold;">Net Payable / Total Due :</td>
+        <td class="summary-val" style="font-weight: bold;">Rs. ${netPayableValue.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+      </tr>` : ''}
+      ${(detail.amountReceived || 0) > 0 ? `
+      <tr>
+        <td colspan="4" style="border-right: 1px solid #000;"></td>
+        <td class="summary-label" style="font-weight: bold;">Paid Amount :</td>
+        <td class="summary-val" style="font-weight: bold; color: #047857;">Rs. ${(detail.amountReceived || 0).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
       </tr>
+      <tr>
+        <td colspan="4" style="border-right: 1px solid #000;"></td>
+        <td class="summary-label" style="font-weight: bold;">Balance Due :</td>
+        <td class="summary-val" style="font-weight: bold; color: #b91c1c;">Rs. ${(Math.max(0, netPayableValue - (detail.amountReceived || 0))).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+      </tr>` : ''}
       <tr>
         <td colspan="6" class="words-row">
           ${amountInWords} Only /-
@@ -903,10 +932,46 @@ export const SalesOrder = ({ onCreateInvoice, onViewDrafts }) => {
                       <span className="font-semibold text-slate-700">₹{selectedInvoice.tax.toLocaleString('en-IN')}</span>
                     </div>
                   )}
-                  <div className="pt-3 mt-1 border-t-2 border-slate-200 flex justify-between items-center">
-                    <span className="text-sm font-bold text-slate-700">Grand Total</span>
-                    <span className="text-xl font-black text-emerald-600">₹{(selectedInvoice.grandTotal || 0).toLocaleString('en-IN')}</span>
+                  {(selectedInvoice.otherCharge || 0) > 0 && (
+                    <div className="flex justify-between text-xs text-slate-500">
+                      <span>Other Charge</span>
+                      <span className="font-semibold text-slate-700">₹{selectedInvoice.otherCharge.toLocaleString('en-IN')}</span>
+                    </div>
+                  )}
+                  {(selectedInvoice.roundOff || 0) !== 0 && (
+                    <div className="flex justify-between text-xs text-slate-500">
+                      <span>Round Off</span>
+                      <span className="font-semibold text-slate-700">₹{selectedInvoice.roundOff.toLocaleString('en-IN')}</span>
+                    </div>
+                  )}
+                  <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-xs">
+                    <span className="font-bold text-slate-700">Current Bill Total</span>
+                    <span className="font-extrabold text-slate-900">₹{(selectedInvoice.grandTotal || 0).toLocaleString('en-IN')}</span>
                   </div>
+                  {(selectedInvoice.previousBalance || 0) > 0 && (
+                    <div className="flex justify-between items-center text-xs text-amber-700 bg-amber-50 px-2 py-1 rounded-lg">
+                      <span className="font-semibold">Previous Balance</span>
+                      <span className="font-bold">+ ₹{selectedInvoice.previousBalance.toLocaleString('en-IN')}</span>
+                    </div>
+                  )}
+                  <div className="pt-2 border-t-2 border-slate-200 flex justify-between items-center">
+                    <span className="text-sm font-bold text-slate-700">Net Total Due</span>
+                    <span className="text-xl font-black text-emerald-600">
+                      ₹{((selectedInvoice.netPayable || ((selectedInvoice.grandTotal || 0) + (selectedInvoice.previousBalance || 0)))).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  {(selectedInvoice.amountReceived || 0) > 0 && (
+                    <>
+                      <div className="flex justify-between text-xs text-emerald-600">
+                        <span>Paid</span>
+                        <span className="font-semibold">₹{selectedInvoice.amountReceived.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div className="flex justify-between text-xs text-rose-600 font-bold">
+                        <span>Balance Due</span>
+                        <span>₹{Math.max(0, (selectedInvoice.netPayable || ((selectedInvoice.grandTotal || 0) + (selectedInvoice.previousBalance || 0))) - selectedInvoice.amountReceived).toLocaleString('en-IN')}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

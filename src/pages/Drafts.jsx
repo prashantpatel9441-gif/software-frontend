@@ -21,10 +21,10 @@ export const Drafts = ({ onEditDraft, onBack }) => {
       const data = await api.get('/invoices');
       if (Array.isArray(data)) {
         const draftInvoices = data
-          .filter(inv => inv.payment === 'Draft')
+          .filter(inv => inv.payment === 'Draft' || inv.paymentStatus === 'Draft')
           .map(inv => ({
             ...inv,
-            id: inv.invoiceId,
+            id: inv.invoiceId || inv._id || inv.id,
             issueDate: inv.issueDate
               ? new Date(inv.issueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
               : '—',
@@ -41,12 +41,13 @@ export const Drafts = ({ onEditDraft, onBack }) => {
   useEffect(() => { fetchDrafts(); }, []);
 
   const handleDelete = async (inv) => {
-    if (!window.confirm(`Delete draft ${inv.id}? This cannot be undone.`)) return;
+    const invId = inv.invoiceId || inv.id || inv._id;
+    if (!window.confirm(`Delete draft ${invId}? This cannot be undone.`)) return;
     try {
       setDeletingId(inv.id);
-      await api.delete(`/invoices/${inv.id}`);
-      setDrafts(prev => prev.filter(d => d.id !== inv.id));
-      if (selectedDraft?.id === inv.id) setSelectedDraft(null);
+      await api.delete(`/invoices/${invId}`);
+      setDrafts(prev => prev.filter(d => d.id !== inv.id && d.invoiceId !== invId));
+      if (selectedDraft?.id === inv.id || selectedDraft?.invoiceId === invId) setSelectedDraft(null);
     } catch (err) {
       console.error('Error deleting draft:', err);
     } finally {

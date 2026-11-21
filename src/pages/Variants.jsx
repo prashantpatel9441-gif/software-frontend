@@ -55,8 +55,8 @@ export const Variants = () => {
   const filteredVariants = variants.filter(v => {
     const term = searchTerm.toLowerCase();
     return (
-      v.name.toLowerCase().includes(term) ||
-      (v.options && v.options.some(opt => opt.toLowerCase().includes(term)))
+      (v.name || '').toLowerCase().includes(term) ||
+      (Array.isArray(v.options) && v.options.some(opt => (opt || '').toLowerCase().includes(term)))
     );
   });
 
@@ -131,6 +131,7 @@ export const Variants = () => {
       setIsModalOpen(false);
     } catch (error) {
       console.error('Error saving variant group:', error);
+      alert(error.message || 'Error saving variant group');
     }
   };
 
@@ -142,6 +143,7 @@ export const Variants = () => {
       fetchVariants();
     } catch (error) {
       console.error('Error deleting variant group:', error);
+      alert(error.message || 'Error deleting variant group');
     }
   };
 

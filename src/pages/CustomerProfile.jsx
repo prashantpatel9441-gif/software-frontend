@@ -64,7 +64,7 @@ const OverviewTab = ({ customer, stats, onEdit, onCreateInvoice, onDelete }) => 
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Customer Information</p>
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white text-lg font-black flex-shrink-0">
-                  {customer.name.charAt(0).toUpperCase()}
+                  {customer?.name ? customer.name.charAt(0).toUpperCase() : '?'}
                 </div>
                 <div>
                   <p className="font-extrabold text-slate-900 text-sm leading-tight">{customer.name}</p>
@@ -444,22 +444,49 @@ const PaymentHistoryTab = ({ stats }) => {
 
 // ─── Main Customer Profile ────────────────────────────────────
 export const CustomerProfile = ({ customerId, onBack, onCreateInvoice }) => {
-  const { customers, allInvoices, refreshCustomers, getCustomerStats } = useCRM();
+  const { customers, allInvoices, refreshCustomers, getCustomerStats, customersLoaded } = useCRM();
   const { showToast, ToastContainer } = useToast();
   const [customer, setCustomer] = useState(null);
   const [stats, setStats] = useState(null);
+  const [notFound, setNotFound] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
   const [editMode, setEditMode] = useState(false);
   const [editForm, setEditForm] = useState({});
 
   useEffect(() => {
     const c = customers.find(cust => cust._id === customerId || cust.id === customerId);
-    setCustomer(c);
     if (c) {
+      setCustomer(c);
       setStats(getCustomerStats(c));
       setEditForm(c);
+      setNotFound(false);
+    } else if (customersLoaded) {
+      crmService.getCustomerById(customerId).then(direct => {
+        if (direct) {
+          setCustomer(direct);
+          setStats(getCustomerStats(direct));
+          setEditForm(direct);
+          setNotFound(false);
+        } else {
+          setNotFound(true);
+        }
+      }).catch(() => setNotFound(true));
     }
-  }, [customerId, allInvoices, customers, getCustomerStats]);
+  }, [customerId, allInvoices, customers, getCustomerStats, customersLoaded]);
+
+  if (notFound) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 space-y-4">
+        <AlertCircle className="w-10 h-10 text-rose-500" />
+        <p className="text-base font-bold text-slate-700">Customer not found</p>
+        {onBack && (
+          <button onClick={onBack} className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition-colors">
+            Back to Customer List
+          </button>
+        )}
+      </div>
+    );
+  }
 
   if (!customer) {
     return (

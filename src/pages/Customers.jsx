@@ -44,20 +44,28 @@ const validateField = (field, value, form = {}) => {
       if (!v) return 'Customer name is required';
       if (v.length < 2) return 'Name must be at least 2 characters';
       if (v.length > 100) return 'Name must be under 100 characters';
-      if (!/^[a-zA-Z\s.\-']+$/.test(v)) return 'Only letters, spaces, dots and hyphens allowed';
+      if (!/^[a-zA-Z0-9\s.\-'()&,]+$/.test(v)) return 'Only letters, numbers, spaces, dots, hyphens, and &, () allowed';
       return '';
     case 'company':
       if (v.length > 100) return 'Company name too long (max 100 chars)';
       return '';
-    case 'mobile':
+    case 'mobile': {
       if (!v) return 'Mobile number is required';
-      if (!/^[6-9]\d{9}$/.test(v)) return 'Must be 10 digits starting with 6, 7, 8 or 9';
+      const digits = v.replace(/\D/g, '');
+      const d10 = digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits;
+      if (!/^[6-9]\d{9}$/.test(d10)) return 'Must be a valid 10-digit Indian mobile number (starts with 6-9)';
       return '';
-    case 'altMobile':
+    }
+    case 'altMobile': {
       if (!v) return '';
-      if (!/^[6-9]\d{9}$/.test(v)) return 'Must be 10 digits starting with 6, 7, 8 or 9';
-      if (v === form.mobile?.trim()) return 'Alt mobile must differ from primary mobile';
+      const digits = v.replace(/\D/g, '');
+      const d10 = digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits;
+      if (!/^[6-9]\d{9}$/.test(d10)) return 'Must be a valid 10-digit Indian mobile number (starts with 6-9)';
+      const primDigits = form.mobile?.toString().replace(/\D/g, '') || '';
+      const prim10 = primDigits.length === 12 && primDigits.startsWith('91') ? primDigits.slice(2) : primDigits;
+      if (d10 === prim10) return 'Alt mobile must differ from primary mobile';
       return '';
+    }
     case 'email':
       if (!v) return '';
       if (v.length > 100) return 'Email too long (max 100 chars)';

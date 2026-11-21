@@ -15,16 +15,20 @@ import {
   Users2,
   UserPlus,
   X,
-  Settings
+  Settings,
+  Layers,
+  Tag,
+  FileText,
+  Shield
 } from 'lucide-react';
 
 export const Sidebar = ({ onLogout, isMobileMenuOpen, setIsMobileMenuOpen }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const activePage = location.pathname.replace('/', '') || 'dashboard';
-  const [salesOpen, setSalesOpen] = useState(activePage === 'sales' || activePage === 'billing');
-  const [productsOpen, setProductsOpen] = useState(activePage === 'products' || activePage === 'categories');
-  const [crmOpen, setCrmOpen] = useState(activePage === 'customers' || activePage === 'customer-profile');
+  const [salesOpen, setSalesOpen] = useState(['sales', 'billing', 'drafts'].includes(activePage));
+  const [productsOpen, setProductsOpen] = useState(['products', 'categories', 'collections', 'variants'].includes(activePage));
+  const [crmOpen, setCrmOpen] = useState(activePage.startsWith('customer'));
 
   let user = { name: 'Admin User', email: 'admin@gmail.com' };
   try {
@@ -46,9 +50,9 @@ export const Sidebar = ({ onLogout, isMobileMenuOpen, setIsMobileMenuOpen }) => 
   const iconClass = (active) => `w-5 h-5 mr-3 flex-shrink-0 transition-colors ${active ? 'text-white' : 'text-slate-400 group-hover:text-emerald-600'}`;
   const subIconClass = (active) => `w-4 h-4 mr-2 ${active ? 'text-white' : 'text-slate-400'}`;
 
-  const isSalesSubActive = isActive('sales') || isActive('billing');
-  const isProductsSubActive = isActive('products') || isActive('categories');
-  const isCrmSubActive = isActive('customers') || isActive('customer-profile');
+  const isSalesSubActive = ['sales', 'billing', 'drafts'].includes(activePage);
+  const isProductsSubActive = ['products', 'categories', 'collections', 'variants'].includes(activePage);
+  const isCrmSubActive = activePage.startsWith('customer');
 
   const handleNavClick = (path) => {
     navigate(`/${path}`);
@@ -134,6 +138,9 @@ export const Sidebar = ({ onLogout, isMobileMenuOpen, setIsMobileMenuOpen }) => 
               <button onClick={() => handleNavClick('billing')} className={subItemClass(isActive('billing'))}>
                 <PlusCircle className={subIconClass(isActive('billing'))} /><span>New Billing</span>
               </button>
+              <button onClick={() => handleNavClick('drafts')} className={subItemClass(isActive('drafts'))}>
+                <FileText className={subIconClass(isActive('drafts'))} /><span>Saved Drafts</span>
+              </button>
             </div>
           )}
         </div>
@@ -154,7 +161,13 @@ export const Sidebar = ({ onLogout, isMobileMenuOpen, setIsMobileMenuOpen }) => 
                 <ListTodo className={subIconClass(isActive('products'))} /><span className="truncate">Products</span>
               </button>
               <button onClick={() => handleNavClick('categories')} className={subItemClass(isActive('categories'))}>
-                <PlusCircle className={subIconClass(isActive('categories'))} /><span className="truncate">Categories &amp; Sub-Categories</span>
+                <PlusCircle className={subIconClass(isActive('categories'))} /><span className="truncate">Categories</span>
+              </button>
+              <button onClick={() => handleNavClick('collections')} className={subItemClass(isActive('collections'))}>
+                <Layers className={subIconClass(isActive('collections'))} /><span className="truncate">Collections</span>
+              </button>
+              <button onClick={() => handleNavClick('variants')} className={subItemClass(isActive('variants'))}>
+                <Tag className={subIconClass(isActive('variants'))} /><span className="truncate">Variants</span>
               </button>
             </div>
           )}
@@ -170,6 +183,12 @@ export const Sidebar = ({ onLogout, isMobileMenuOpen, setIsMobileMenuOpen }) => 
         <button onClick={() => handleNavClick('reports')} className={itemClass(isActive('reports'))}>
           <BarChart3 className={iconClass(isActive('reports'))} />
           <span className="truncate">Reports</span>
+        </button>
+
+        {/* Users */}
+        <button onClick={() => handleNavClick('users')} className={itemClass(isActive('users'))}>
+          <Shield className={iconClass(isActive('users'))} />
+          <span className="truncate">Users</span>
         </button>
 
         {/* Settings */}

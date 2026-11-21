@@ -58,12 +58,12 @@ export const Reports = () => {
           api.get('/products').catch(() => [])
         ]);
 
-        const invoices = Array.isArray(invoicesData) ? invoicesData : [];
-        const inventory = Array.isArray(inventoryData) ? inventoryData : [];
-        const products = Array.isArray(productsData) ? productsData : [];
+        const invoices = Array.isArray(invoicesData) ? invoicesData : (invoicesData?.invoices || []);
+        const inventory = Array.isArray(inventoryData) ? inventoryData : (inventoryData?.inventory || []);
+        const products = Array.isArray(productsData) ? productsData : (productsData?.products || []);
 
         // Sales Calculations
-        const totalRevenue = invoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
+        const totalRevenue = invoices.reduce((sum, inv) => sum + (parseFloat(inv.netPayable || inv.grandTotal || inv.total) || 0), 0);
         const completedOrders = invoices.length;
         const avgOrderValue = completedOrders > 0 ? totalRevenue / completedOrders : 0;
 
@@ -71,11 +71,11 @@ export const Reports = () => {
         const netProfit = totalRevenue * 0.15; // Rough 15% margin example
 
         // Production / Products
-        const finishedGoods = products.reduce((sum, p) => sum + (p.qty || 0), 0);
+        const finishedGoods = products.reduce((sum, p) => sum + (parseInt(p.qty) || 0), 0);
 
         // Inventory
-        const stockValue = inventory.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
-        const lowStockCount = inventory.filter(item => item.quantity < 10 && item.quantity > 0).length;
+        const stockValue = inventory.reduce((sum, item) => sum + ((parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0)), 0);
+        const lowStockCount = inventory.filter(item => (parseFloat(item.quantity) || 0) < 10 && (parseFloat(item.quantity) || 0) > 0).length;
 
         setReportsData({
           sales: {

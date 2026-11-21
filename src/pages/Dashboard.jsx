@@ -43,8 +43,9 @@ export const Dashboard = ({ onManageOrders, onViewCustomers }) => {
       if (Array.isArray(invoices)) {
         setAllInvoices(invoices);
       }
-      if (Array.isArray(products)) {
-        setAllProductsCount(products.length);
+      if (products) {
+        const count = products.totalItems || (Array.isArray(products.products) ? products.products.length : (Array.isArray(products) ? products.length : 0));
+        setAllProductsCount(count);
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -80,7 +81,9 @@ export const Dashboard = ({ onManageOrders, onViewCustomers }) => {
 
   const recentOrders = useMemo(() => {
     return filteredInvoices.slice(0, 5).map(inv => {
-      const grandTotal = inv.grandTotal || 0;
+      const grandTotal = (inv.netPayable !== undefined && inv.netPayable !== null && inv.netPayable > 0)
+        ? inv.netPayable
+        : (inv.grandTotal || 0);
       const paid = inv.amountReceived || 0;
       const pending = Math.max(0, grandTotal - paid);
       let computedPayment = inv.payment || 'Pending';
@@ -91,8 +94,8 @@ export const Dashboard = ({ onManageOrders, onViewCustomers }) => {
       }
 
       return {
-        id: inv.invoiceId,
-        customer: inv.client,
+        id: inv.invoiceId || inv._id || inv.id,
+        customer: inv.client || 'Unknown Customer',
         item: inv.items && inv.items.length > 0 ? inv.items.map(item => item.product).join(', ') : 'No items',
         price: '₹' + grandTotal.toLocaleString('en-IN'),
         status: inv.delivery || 'Processing',
@@ -103,9 +106,20 @@ export const Dashboard = ({ onManageOrders, onViewCustomers }) => {
   }, [filteredInvoices]);
 
   const stats = useMemo(() => {
-    const revenue = filteredInvoices.reduce((sum, inv) => sum + inv.grandTotal, 0);
-    const salesUnits = filteredInvoices.reduce((sum, inv) => sum + (inv.items ? inv.items.reduce((s, i) => s + i.qty, 0) : 0), 0);
-    const uniqueCustomers = new Set(filteredInvoices.map(inv => inv.client)).size;
+    const revenue = filteredInvoices.reduce((sum, inv) => sum + (parseFloat(inv.grandTotal) || 0), 0);
+    const salesUnits = filteredInvoices.reduce((sum, inv) => sum + (inv.items ? inv.items.reduce((s, i) => s + (parseInt(i.qty) || 0), 0) : 0), 0);
+    
+    // Count unique clients from both customers and filteredInvoices
+    const customerNamesSet = new Set();
+    if (Array.isArray(customers)) {
+      customers.forEach(c => {
+        if (c.name && c.name.trim()) customerNamesSet.add(c.name.trim().toLowerCase());
+      });
+    }
+    filteredInvoices.forEach(inv => {
+      if (inv.client && inv.client.trim()) customerNamesSet.add(inv.client.trim().toLowerCase());
+    });
+    const uniqueCustomers = customerNamesSet.size;
     const isFiltered = appliedDateRange.start || appliedDateRange.end;
     
     return [
@@ -121,7 +135,7 @@ export const Dashboard = ({ onManageOrders, onViewCustomers }) => {
       {
         id: 'revenue',
         title: 'Total Revenue',
-        value: '₹' + revenue.toLocaleString('en-IN'),
+        value: '₹' + revenue.toLocaleString('en-IN', { maximumFractionDigits: 2 }),
         change: isFiltered ? 'Filtered' : '',
         isPositive: true,
         icon: DollarSign,
@@ -146,7 +160,7 @@ export const Dashboard = ({ onManageOrders, onViewCustomers }) => {
         color: 'text-emerald-500 bg-emerald-50 border-emerald-100'
       }
     ];
-  }, [filteredInvoices, appliedDateRange, allProductsCount]);
+  }, [filteredInvoices, appliedDateRange, allProductsCount, customers]);
 
   const getDonutData = () => {
     if (!filteredInvoices.length) return { sale: 0, distribute: 0, return: 0, total: 0 };
@@ -161,31 +175,76 @@ export const Dashboard = ({ onManageOrders, onViewCustomers }) => {
   };
 
   const renderActiveGraph = () => {
-    // Generate dummy arrays based on actual data counts so the graphs look alive
-    const salesCount = filteredInvoices.reduce((sum, inv) => sum + (inv.items ? inv.items.reduce((s, i) => s + i.qty, 0) : 0), 0);
-    const revCount = filteredInvoices.reduce((sum, inv) => sum + inv.grandTotal, 0);
-    const custCount = new Set(filteredInvoices.map(inv => inv.client)).size;
-    const retCount = filteredInvoices.filter(inv => inv.delivery === 'Cancelled').length;
+    // Dynamic aggregation from filteredInvoices
+    const salesCount = filteredInvoices.reduce((sum, inv) => sum + (inv.items ? inv.items.reduce((s, i) => s + (parseInt(i.qty) || 0), 0) : 0), 0);
+    const revCount = filteredInvoices.reduce((sum, inv) => sum + (parseFloat(inv.grandTotal) || 0), 0);
+    const uniqueClientsInFilter = new Set(filteredInvoices.map(inv => inv.client).filter(Boolean)).size;
+    const retCount = filteredInvoices.filter(inv => inv.delivery === 'Cancelled' || inv.payment === 'Cancelled' || inv.paymentStatus === 'Cancelled').length;
 
-    const renderBarChart = (data, labels, valueMultiplier = 1) => {
+    // 1. Sales: aggregate real item qty sold grouped by day of week (Mon..Sun)
+    const salesByDay = [0, 0, 0, 0, 0, 0, 0];
+    // 2. Customers: distinct clients who ordered grouped by day of week (Mon..Sun)
+    const customersByDaySets = [new Set(), new Set(), new Set(), new Set(), new Set(), new Set(), new Set()];
+    // 3. Revenue: aggregate real grandTotal grouped by week of month (W1..W4)
+    const revByWeek = [0, 0, 0, 0];
+    // 4. Refunds: count cancelled invoices grouped by week of month (W1..W4)
+    const refundsByWeek = [0, 0, 0, 0];
+
+    filteredInvoices.forEach(inv => {
+      const gTotal = parseFloat(inv.grandTotal) || 0;
+      const units = inv.items ? inv.items.reduce((s, i) => s + (parseInt(i.qty) || 0), 0) : 0;
+      const isCancelled = inv.delivery === 'Cancelled' || inv.payment === 'Cancelled' || inv.paymentStatus === 'Cancelled';
+      const clientName = inv.client ? inv.client.trim().toLowerCase() : '';
+
+      if (inv.issueDate) {
+        const d = new Date(inv.issueDate);
+        if (!isNaN(d.getTime())) {
+          // Day of week: (0=Sun, 1=Mon, ..., 6=Sat) -> 0=Mon..6=Sun
+          const dayIndex = (d.getDay() + 6) % 7;
+          salesByDay[dayIndex] += units;
+          if (clientName) {
+            customersByDaySets[dayIndex].add(clientName);
+          }
+
+          // Week of month: W1 (days 1-7), W2 (8-14), W3 (15-21), W4 (22+)
+          const dayOfMonth = d.getDate();
+          const weekIndex = Math.min(3, Math.floor((dayOfMonth - 1) / 7));
+          revByWeek[weekIndex] += gTotal;
+          if (isCancelled) {
+            refundsByWeek[weekIndex]++;
+          }
+        }
+      }
+    });
+
+    const customersByDay = customersByDaySets.map(s => s.size);
+    const revByWeekRounded = revByWeek.map(v => Math.round(v));
+
+    const renderBarChart = (data, labels) => {
+      const max = Math.max(...data, 0);
       const sorted = [...data].sort((a,b) => b - a);
-      const max = sorted[0];
       const secondMax = sorted[1] || max;
       const thirdMax = sorted[2] || secondMax;
       
       return (
         <div className="h-64 w-full bg-white rounded-2xl flex items-end justify-between px-2 sm:px-6 py-6 border border-slate-50 overflow-x-auto">
           {data.map((val, i) => {
-            const isHighest = val === max;
-            const isSecond = val === secondMax && !isHighest;
-            const isThird = val === thirdMax && !isHighest && !isSecond;
+            const isHighest = val > 0 && val === max;
+            const isSecond = val > 0 && val === secondMax && !isHighest;
+            const isThird = val > 0 && val === thirdMax && !isHighest && !isSecond;
             const isSolid = isHighest || isSecond || isThird;
+            const heightPercent = max > 0 
+              ? (val > 0 ? Math.max(12, Math.round((val / max) * 90)) : 6)
+              : 6;
             
             return (
-              <div key={i} className="flex flex-col items-center gap-2 sm:gap-4 w-full group min-w-[2rem] sm:min-w-[3rem] shrink-0 sm:shrink">
+              <div key={i} className="flex flex-col items-center gap-2 sm:gap-4 w-full group min-w-[2rem] sm:min-w-[3rem] shrink-0 sm:shrink" title={`${labels[i]}: ${val.toLocaleString('en-IN')}`}>
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded shadow-xs pointer-events-none">
+                  {val.toLocaleString('en-IN')}
+                </div>
                 <div 
                   style={{ 
-                    height: `${Math.min(100, Math.max(10, val * valueMultiplier))}%`,
+                    height: `${heightPercent}%`,
                     backgroundSize: '12px 12px',
                     backgroundImage: !isSolid ? 'repeating-linear-gradient(45deg, #e2e8f0 0, #e2e8f0 2px, transparent 2px, transparent 6px)' : 'none',
                     backgroundColor: isHighest ? '#124C36' : (isSecond ? '#388E6D' : (isThird ? '#86EFAC' : 'transparent')),
@@ -208,13 +267,13 @@ export const Dashboard = ({ onManageOrders, onViewCustomers }) => {
             <div className="flex justify-between items-center">
               <div>
                 <h4 className="text-sm font-bold text-slate-800">Sales Volume Trend</h4>
-                <p className="text-xs text-slate-400">Total units sold</p>
+                <p className="text-xs text-slate-400">Total units sold by day of week</p>
               </div>
               <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg flex items-center">
-                <TrendingUp className="w-3.5 h-3.5 mr-1" /> Total: {salesCount}
+                <TrendingUp className="w-3.5 h-3.5 mr-1" /> Total: {salesCount} units
               </span>
             </div>
-            {renderBarChart([15, 25, 45, 80, 60, 90, 75], ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])}
+            {renderBarChart(salesByDay, ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])}
           </div>
         );
       case 'revenue':
@@ -223,13 +282,13 @@ export const Dashboard = ({ onManageOrders, onViewCustomers }) => {
             <div className="flex justify-between items-center">
               <div>
                 <h4 className="text-sm font-bold text-slate-800">Revenue Growth Trend</h4>
-                <p className="text-xs text-slate-400">Earnings generated</p>
+                <p className="text-xs text-slate-400">Earnings generated by week of month</p>
               </div>
               <span className="text-xs font-bold text-emerald-500 bg-emerald-50 px-2.5 py-1 rounded-lg flex items-center">
-                <TrendingUp className="w-3.5 h-3.5 mr-1" /> Total: ₹{revCount.toLocaleString('en-IN')}
+                <TrendingUp className="w-3.5 h-3.5 mr-1" /> Total: ₹{revCount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
               </span>
             </div>
-            {renderBarChart([40, 60, 50, 90], ['W1', 'W2', 'W3', 'W4'])}
+            {renderBarChart(revByWeekRounded, ['W1', 'W2', 'W3', 'W4'])}
           </div>
         );
       case 'customers':
@@ -237,14 +296,14 @@ export const Dashboard = ({ onManageOrders, onViewCustomers }) => {
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <div>
-                <h4 className="text-sm font-bold text-slate-800">New Customer Signups</h4>
-                <p className="text-xs text-slate-400">Daily client acquisitions</p>
+                <h4 className="text-sm font-bold text-slate-800">Customer Activity Trend</h4>
+                <p className="text-xs text-slate-400">Active ordering clients by day of week</p>
               </div>
               <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg flex items-center">
-                <Users className="w-3.5 h-3.5 mr-1" /> Total: {custCount}
+                <Users className="w-3.5 h-3.5 mr-1" /> Total: {uniqueClientsInFilter} clients
               </span>
             </div>
-            {renderBarChart([30, 45, custCount > 0 ? 60 : 10, 40, 75, 90, 85], ['M', 'T', 'W', 'T', 'F', 'S', 'S'])}
+            {renderBarChart(customersByDay, ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])}
           </div>
         );
       case 'refunds':
@@ -253,13 +312,13 @@ export const Dashboard = ({ onManageOrders, onViewCustomers }) => {
             <div className="flex justify-between items-center">
               <div>
                 <h4 className="text-sm font-bold text-slate-800">Refund Processing Log</h4>
-                <p className="text-xs text-slate-400">Total refunded orders</p>
+                <p className="text-xs text-slate-400">Cancelled orders by week of month</p>
               </div>
               <span className="text-xs font-bold text-emerald-500 bg-emerald-50 px-2.5 py-1 rounded-lg flex items-center">
                 <TrendingDown className="w-3.5 h-3.5 mr-1" /> Total: {retCount}
               </span>
             </div>
-            {renderBarChart([15, 20, retCount > 0 ? 30 : 10, 5, 8, 12, 6], ['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7'], 3)}
+            {renderBarChart(refundsByWeek, ['W1', 'W2', 'W3', 'W4'])}
           </div>
         );
       default:
@@ -352,7 +411,10 @@ export const Dashboard = ({ onManageOrders, onViewCustomers }) => {
           return d.getMonth() === nm && d.getFullYear() === ny;
         }).length;
         const totalOutstanding = allInvoices.reduce((sum, inv) => {
-          return sum + Math.max(0, (inv.grandTotal || 0) - (inv.amountReceived || 0));
+          const grand = (inv.netPayable !== undefined && inv.netPayable !== null && inv.netPayable > 0)
+            ? inv.netPayable
+            : (inv.grandTotal || 0);
+          return sum + Math.max(0, grand - (inv.amountReceived || 0));
         }, 0);
         const crmStats = [
           { label: 'CRM Customers', value: customers.length, icon: Users2, color: 'text-teal-600 bg-teal-50' },

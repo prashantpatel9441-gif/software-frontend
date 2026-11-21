@@ -19,6 +19,20 @@ const getHeaders = () => {
   return headers;
 };
 
+const parseResponse = async (response, fallbackMsg = 'Request failed') => {
+  const text = await response.text();
+  let result;
+  try {
+    result = text ? JSON.parse(text) : {};
+  } catch (e) {
+    result = { message: text || response.statusText || fallbackMsg };
+  }
+  if (!response.ok) {
+    throw new Error(result.message || fallbackMsg);
+  }
+  return result;
+};
+
 export const api = {
   get: async (endpoint, options = {}) => {
     try {
@@ -43,9 +57,7 @@ export const api = {
         headers: getHeaders(),
         signal,
       });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.message || 'Failed to fetch data');
-      return result;
+      return await parseResponse(response, 'Failed to fetch data');
     } catch (error) {
       if (error.name === 'AbortError') {
         return { data: [], total: 0 };
@@ -66,9 +78,7 @@ export const api = {
       body: isFormData ? data : JSON.stringify(data),
       signal: options.signal,
     });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.message || 'Failed to save data');
-    return result;
+    return await parseResponse(response, 'Failed to save data');
   },
 
   put: async (endpoint, data, options = {}) => {
@@ -83,9 +93,7 @@ export const api = {
       body: isFormData ? data : JSON.stringify(data),
       signal: options.signal,
     });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.message || 'Failed to update data');
-    return result;
+    return await parseResponse(response, 'Failed to update data');
   },
 
   delete: async (endpoint, options = {}) => {
@@ -94,8 +102,6 @@ export const api = {
       headers: getHeaders(),
       signal: options.signal,
     });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.message || 'Failed to delete data');
-    return result;
+    return await parseResponse(response, 'Failed to delete data');
   },
 };

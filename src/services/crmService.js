@@ -6,8 +6,15 @@ export const getCustomers = async () => {
 };
 
 export const getCustomerById = async (id) => {
-  const customers = await getCustomers();
-  return customers.find(c => c._id === id) || null;
+  try {
+    const customers = await getCustomers();
+    if (Array.isArray(customers)) {
+      return customers.find(c => c._id === id || c.id === id) || null;
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
 };
 
 export const checkDuplicate = async (mobile, email, gst, excludeId = null) => {
@@ -49,9 +56,17 @@ export const searchCustomers = (customers, query) => {
 
 // ─── Sync Customer from Invoice (Client Side helper) ──────────
 export const syncCustomerFromInvoice = async (invoice, customers) => {
-  if (!invoice?.phone) return null;
+  if (!invoice?.phone && !invoice?.client) return null;
 
-  let customer = customers.find(c => c.mobile === invoice.phone);
+  const list = Array.isArray(customers) ? customers : [];
+  const cleanPhone = invoice.phone ? String(invoice.phone).replace(/\D/g, '') : '';
+  const cleanName = invoice.client ? invoice.client.trim().toLowerCase() : '';
+
+  let customer = list.find(c => {
+    const cPhone = c.mobile ? String(c.mobile).replace(/\D/g, '') : '';
+    const cName = c.name ? c.name.trim().toLowerCase() : '';
+    return (cleanPhone && cPhone === cleanPhone) || (cleanName && cName === cleanName);
+  });
 
   if (!customer) {
     customer = await saveCustomer({
@@ -88,16 +103,24 @@ export const syncCustomerFromInvoice = async (invoice, customers) => {
 export const computeCustomerStats = (customer, allInvoices) => {
   if (!customer) return null;
 
-  const invs = (allInvoices || []).filter(inv =>
-    inv.phone === customer.mobile && inv.payment !== 'Draft'
-  );
+  const phone = customer.mobile ? String(customer.mobile).replace(/\D/g, '') : '';
+  const name = customer.name ? customer.name.trim().toLowerCase() : '';
+
+  const invs = (allInvoices || []).filter(inv => {
+    if (inv.payment === 'Draft' || inv.paymentStatus === 'Draft') return false;
+    const invPhone = inv.phone ? String(inv.phone).replace(/\D/g, '') : '';
+    const invName = inv.client ? inv.client.trim().toLowerCase() : '';
+    const phoneMatch = phone && invPhone && invPhone === phone;
+    const nameMatch = name && invName && invName === name;
+    return phoneMatch || nameMatch;
+  });
 
   const totalBills = invs.length;
-  const totalPurchase = invs.reduce((s, i) => s + (i.grandTotal || 0), 0);
-  const totalPaid = invs.reduce((s, i) => s + (i.amountReceived || 0), 0);
-  const outstanding = Math.max(0, totalPurchase - totalPaid);
+  const totalPurchase = invs.reduce((s, i) => s + (parseFloat(i.netPayable || i.grandTotal || i.total) || 0), 0);
+  const totalPaid = invs.reduce((s, i) => s + (parseFloat(i.amountReceived) || 0), 0);
+  const outstanding = invs.reduce((s, i) => s + Math.max(0, (parseFloat(i.netPayable || i.grandTotal) || 0) - (parseFloat(i.amountReceived) || 0)), 0);
   const avgOrderValue = totalBills > 0 ? totalPurchase / totalBills : 0;
-  const sorted = [...invs].sort((a, b) => new Date(b.issueDate) - new Date(a.issueDate));
+  const sorted = [...invs].sort((a, b) => new Date(b.issueDate || 0) - new Date(a.issueDate || 0));
   const lastPurchaseDate = sorted[0]?.issueDate || null;
 
   return { totalBills, totalPurchase, totalPaid, outstanding, avgOrderValue, lastPurchaseDate, invoices: sorted };
@@ -105,6 +128,14 @@ export const computeCustomerStats = (customer, allInvoices) => {
 
 // ─── Product Pricing ──────────────────────────────────────────
 export const getCustomerPricing = async (customerId, productName) => {
-  const pricing = await api.get(`/customers/${customerId}/pricing`);
-  return pricing.find(p => p.productName === productName) || null;
+  if (!customerId || !productName) return null;
+  try {
+    const pricing = await api.get(`/customers/${customerId}/pricing`);
+    if (Array.isArray(pricing)) {
+      return pricing.find(p => p.productName === productName) || null;
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
 };

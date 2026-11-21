@@ -238,7 +238,7 @@ export const ProductManagement = () => {
       resetForm();
     } catch (error) {
       console.error(`Error ${modalType === 'add' ? 'adding' : 'updating'} product:`, error);
-      showToast(error.response?.data?.message || 'Error saving product', 'error');
+      showToast(error.message || error.response?.data?.message || 'Error saving product', 'error');
     }
   };
 
@@ -277,7 +277,7 @@ export const ProductManagement = () => {
       });
     } catch (error) {
       console.error('Error adding variant:', error);
-      showToast(error.response?.data?.message || 'Error adding variant', 'error');
+      showToast(error.message || error.response?.data?.message || 'Error adding variant', 'error');
     }
   };
 
@@ -327,7 +327,7 @@ export const ProductManagement = () => {
       showToast('Product deleted successfully!', 'success');
     } catch (error) {
       console.error('Error deleting product:', error);
-      showToast(error.response?.data?.message || 'Error deleting product', 'error');
+      showToast(error.message || error.response?.data?.message || 'Error deleting product', 'error');
     }
   };
 

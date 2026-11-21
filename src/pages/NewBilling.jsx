@@ -41,7 +41,7 @@ const ProductSearch = ({ item, productList, onSelect, onChange }) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const filtered = productList.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || (p.sku && p.sku.toLowerCase().includes(search.toLowerCase())));
+  const filtered = productList.filter(p => ((p?.name || '').toLowerCase().includes(search.toLowerCase())) || (p?.sku && p.sku.toLowerCase().includes(search.toLowerCase())));
 
   const handleKeyDown = (e) => {
     if (!isOpen) return;
@@ -91,7 +91,7 @@ const ProductSearch = ({ item, productList, onSelect, onChange }) => {
         <div className="absolute z-[9999] w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
           {filtered.map((p, index) => (
             <div
-              key={p._id}
+              key={p._id || p.id || index}
               id={`product-item-${item.id}-${index}`}
               onClick={() => {
                 onSelect(p.name);
@@ -139,9 +139,11 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
   const [amountReceived, setAmountReceived] = useState(0);
   const [otherCharge, setOtherCharge] = useState(0);
   const [roundOff, setRoundOff] = useState(0);
+  const [detectedPendingBalance, setDetectedPendingBalance] = useState(0);
+  const [includePreviousBalance, setIncludePreviousBalance] = useState(true);
   const [paymentStatus, setPaymentStatus] = useState('Pending (Credit)');
   const [paymentMethod, setPaymentMethod] = useState('Cash');
-  const [summary, setSummary] = useState({ subtotal: 0, discount: 0, tax: 0, otherCharge: 0, roundOff: 0, grandTotal: 0, pendingBalance: 0 });
+  const [summary, setSummary] = useState({ subtotal: 0, discount: 0, tax: 0, otherCharge: 0, roundOff: 0, grandTotal: 0, previousBalance: 0, netPayable: 0, pendingBalance: 0 });
   const [invoiceId, setInvoiceId] = useState('');
   const [productList, setProductList] = useState([]);
   const [priceHints, setPriceHints] = useState({});
@@ -245,6 +247,15 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
       setAmountReceived(draftData.amountReceived || 0);
       setOtherCharge(draftData.otherCharge || 0);
       setRoundOff(draftData.roundOff || 0);
+      if (draftData.previousBalance !== undefined) {
+        const pb = parseFloat(draftData.previousBalance) || 0;
+        if (pb > 0) {
+          setDetectedPendingBalance(pb);
+          setIncludePreviousBalance(true);
+        } else {
+          setIncludePreviousBalance(false);
+        }
+      }
       setInvoiceId(draftData.id || draftData.invoiceId || '');
       setInvoiceType(draftData.invoiceType || '');
       setDocumentNumber(draftData.documentNumber || '');
@@ -327,6 +338,42 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
     }
   }, [customerName, allInvoices, isEditingDraft]);
 
+  // ── Auto-calculate client previous pending balance ──────────
+  useEffect(() => {
+    if (isEditingDraft && draftData?.previousBalance !== undefined) return;
+    const phone = customerPhone ? customerPhone.trim().replace(/\D/g, '') : '';
+    const name = customerName ? customerName.trim().toLowerCase() : '';
+    if (!phone && !name) {
+      setDetectedPendingBalance(0);
+      setIncludePreviousBalance(true);
+      return;
+    }
+
+    const prevInvoices = allInvoices.filter(inv => {
+      if (inv.paymentStatus === 'Draft' || inv.payment === 'Draft') return false;
+      const invId = inv.invoiceId || inv.id;
+      const currId = invoiceId || draftData?.invoiceId || draftData?.id;
+      if (invId && currId && invId === currId) return false;
+
+      const invPhone = inv.phone ? String(inv.phone).trim().replace(/\D/g, '') : '';
+      const invName = inv.client ? String(inv.client).trim().toLowerCase() : '';
+
+      const matchesPhone = phone && invPhone && invPhone === phone;
+      const matchesName = name && invName && invName === name;
+      return matchesPhone || matchesName;
+    });
+
+    const sumPending = prevInvoices.reduce((acc, inv) => {
+      const gTotal = parseFloat(inv.grandTotal) || 0;
+      const paid = parseFloat(inv.amountReceived) || 0;
+      return acc + Math.max(0, gTotal - paid);
+    }, 0);
+
+    const detected = parseFloat(sumPending.toFixed(2));
+    setDetectedPendingBalance(detected);
+    setIncludePreviousBalance(true);
+  }, [customerPhone, customerName, allInvoices, invoiceId, isEditingDraft, draftData]);
+
   // ── Calculate totals ───────────────────────────────────────
   useEffect(() => {
     let subtotal = 0, discount = 0, tax = 0;
@@ -342,18 +389,36 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
     });
     const oc = parseFloat(otherCharge) || 0;
     const ro = parseFloat(roundOff) || 0;
-    const grandTotal = parseFloat((subtotal - discount + tax + oc + ro).toFixed(2));
-    const pendingBalance = parseFloat(Math.max(0, grandTotal - (parseFloat(amountReceived) || 0)).toFixed(2));
+    const currentBillTotal = parseFloat((subtotal - discount + tax + oc + ro).toFixed(2));
+    const effectivePreviousBalance = includePreviousBalance ? (parseFloat(detectedPendingBalance) || 0) : 0;
+    const netPayable = parseFloat((currentBillTotal + effectivePreviousBalance).toFixed(2));
+    const pendingBalance = parseFloat(Math.max(0, netPayable - (parseFloat(amountReceived) || 0)).toFixed(2));
     setSummary({ 
       subtotal: parseFloat(subtotal.toFixed(2)), 
       discount: parseFloat(discount.toFixed(2)), 
       tax: parseFloat(tax.toFixed(2)), 
       otherCharge: oc, 
       roundOff: ro, 
-      grandTotal, 
+      grandTotal: currentBillTotal, 
+      previousBalance: effectivePreviousBalance,
+      netPayable,
       pendingBalance 
     });
-  }, [items, amountReceived, otherCharge, roundOff]);
+  }, [items, amountReceived, otherCharge, roundOff, detectedPendingBalance, includePreviousBalance]);
+
+  const handleRemovePreviousBalance = () => {
+    setIncludePreviousBalance(false);
+    if (paymentStatus === 'Paid') {
+      setAmountReceived(summary.grandTotal);
+    }
+  };
+
+  const handleAddBackPreviousBalance = () => {
+    setIncludePreviousBalance(true);
+    if (paymentStatus === 'Paid') {
+      setAmountReceived(parseFloat((summary.grandTotal + detectedPendingBalance).toFixed(2)));
+    }
+  };
 
   // ── Update price hints when customer or product changes ────
   const updatePriceHint = async (itemId, productName) => {
@@ -511,8 +576,10 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
       if (!customerName.trim() || !customerPhone.trim()) {
         showToast('Please fill in Customer Name and Phone Number', 'error'); return;
       }
-      if (!/^[0-9]{10}$/.test(customerPhone.trim())) {
-        showToast('Phone number must be exactly 10 digits', 'error'); return;
+      const rawDigits = customerPhone.trim().replace(/\D/g, '');
+      const d10 = rawDigits.length === 12 && rawDigits.startsWith('91') ? rawDigits.slice(2) : rawDigits;
+      if (!/^[6-9]\d{9}$/.test(d10)) {
+        showToast('Please enter a valid 10-digit mobile number (starts with 6-9)', 'error'); return;
       }
       if (items.some(i => !i.product.trim())) {
         showToast('Please ensure all items have a product selected', 'error'); return;
@@ -562,6 +629,8 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
       otherCharge: parseFloat(otherCharge) || 0,
       roundOff: parseFloat(roundOff) || 0,
       grandTotal: summary.grandTotal,
+      previousBalance: summary.previousBalance || 0,
+      netPayable: summary.netPayable,
       amountReceived: parseFloat(parseFloat(amountReceived).toFixed(2)) || 0,
       paymentStatus: overrideStatus === 'Draft' ? 'Draft' : paymentStatus,
       paymentMethod,
@@ -1031,8 +1100,68 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
               </div>
 
               <div className="border-t border-slate-100 pt-3 flex justify-between items-center text-sm">
-                <span className="font-bold text-slate-800">Grand Total</span>
+                <span className="font-bold text-slate-800">Current Bill Total</span>
                 <span className="text-base font-extrabold text-slate-900">₹{summary.grandTotal.toFixed(2)}</span>
+              </div>
+
+              {/* Previous Pending Balance Section */}
+              {detectedPendingBalance > 0 && (
+                includePreviousBalance ? (
+                  <div className="p-3.5 bg-amber-50/80 border border-amber-200/90 rounded-2xl space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-full">
+                          Pending Balance
+                        </span>
+                        <span className="text-xs font-bold text-amber-900">
+                          Previous Bills
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleRemovePreviousBalance}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold text-rose-700 bg-white hover:bg-rose-50 border border-rose-200 rounded-lg shadow-sm transition-colors cursor-pointer"
+                        title="Remove from this bill (will remain pending for next bill)"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                    <div className="flex items-baseline justify-between pt-1">
+                      <span className="text-xs text-amber-800 font-medium">Previous Pending Bill Balance:</span>
+                      <span className="text-sm font-extrabold text-amber-900">
+                        + ₹{detectedPendingBalance.toFixed(2)}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-amber-700/90 leading-tight">
+                      Automatically detected from earlier unpaid bills. Included in Net Payable below.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-slate-50 border border-dashed border-slate-300 rounded-2xl flex items-center justify-between gap-3">
+                    <div className="text-left">
+                      <p className="text-xs font-semibold text-slate-700">
+                        Previous balance of <span className="font-extrabold font-mono text-slate-900">₹{detectedPendingBalance.toFixed(2)}</span> removed from this bill
+                      </p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        Will remain pending and shift to the next bill
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddBackPreviousBalance}
+                      className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Add Back</span>
+                    </button>
+                  </div>
+                )
+              )}
+
+              <div className="border-t border-slate-200 pt-3 flex justify-between items-center text-sm">
+                <span className="font-extrabold text-slate-900">Net Payable / Total Due</span>
+                <span className="text-lg font-black text-emerald-700">₹{summary.netPayable.toFixed(2)}</span>
               </div>
             </div>
 
@@ -1054,7 +1183,7 @@ export const NewBilling = ({ onBack, draftData, prefillCustomer }) => {
                 const newStatus = e.target.value;
                 setPaymentStatus(newStatus);
                 if (newStatus === 'Paid') {
-                  setAmountReceived(summary.grandTotal);
+                  setAmountReceived(summary.netPayable);
                 } else {
                   setAmountReceived(0);
                 }

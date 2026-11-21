@@ -19,16 +19,17 @@ export const Login = ({ onLoginSuccess }) => {
 
     // Try live API for credentials
     try {
-      const response = await api.post('/auth/login', { email, password });
+      const response = await api.post('/auth/login', { email: enteredEmail, password: enteredPassword });
       if (response.token) {
         localStorage.setItem('token', response.token);
         localStorage.setItem('user', JSON.stringify(response));
+        localStorage.setItem('adminUser', JSON.stringify(response));
         onLoginSuccess();
       } else {
         setError(response.message || 'Invalid email or password');
       }
     } catch (err) {
-      setError('Invalid email or password. Please try again.');
+      setError(err.message || 'Invalid email or password. Please try again.');
     } finally {
       setLoading(false);
     }

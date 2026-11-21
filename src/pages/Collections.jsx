@@ -67,8 +67,8 @@ export const Collections = () => {
   const filteredCollections = collections.filter(c => {
     const term = searchTerm.toLowerCase();
     return (
-      c.name.toLowerCase().includes(term) ||
-      (c.description && c.description.toLowerCase().includes(term))
+      (c.name || '').toLowerCase().includes(term) ||
+      ((c.description || '').toLowerCase().includes(term))
     );
   });
 
@@ -120,6 +120,7 @@ export const Collections = () => {
       setIsModalOpen(false);
     } catch (error) {
       console.error('Error saving collection:', error);
+      alert(error.message || 'Error saving collection');
     }
   };
 
@@ -131,6 +132,7 @@ export const Collections = () => {
       fetchCollections();
     } catch (error) {
       console.error('Error deleting collection:', error);
+      alert(error.message || 'Error deleting collection');
     }
   };
 

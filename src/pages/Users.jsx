@@ -20,7 +20,7 @@ export const Users = () => {
     try {
       setLoading(true);
       const data = await api.get('/users');
-      setUsers(data);
+      setUsers(Array.isArray(data) ? data : (data?.users || []));
     } catch (e) {
       setError(e.message || 'Failed to fetch users');
     } finally {
@@ -33,10 +33,14 @@ export const Users = () => {
     setSaving(true);
     setError('');
     try {
+      const payload = { ...form };
+      if (editingId && !payload.password) {
+        delete payload.password;
+      }
       if (editingId) {
-        await api.put(`/users/${editingId}`, form);
+        await api.put(`/users/${editingId}`, payload);
       } else {
-        await api.post('/users', form);
+        await api.post('/users', payload);
       }
       setShowModal(false);
       fetchUsers();

@@ -8,9 +8,13 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     // Check local storage for existing token/user
-    const storedUser = localStorage.getItem('adminUser');
+    const storedUser = localStorage.getItem('adminUser') || localStorage.getItem('user');
     if (storedUser) {
-      setUser(JSON.parse(storedUser));
+      try {
+        setUser(JSON.parse(storedUser));
+      } catch (e) {
+        setUser(null);
+      }
     }
     setLoading(false);
   }, []);
@@ -18,12 +22,14 @@ export const AuthProvider = ({ children }) => {
   const login = (userData, token) => {
     localStorage.setItem('token', token);
     localStorage.setItem('adminUser', JSON.stringify(userData));
+    localStorage.setItem('user', JSON.stringify(userData));
     setUser(userData);
   };
 
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('adminUser');
+    localStorage.removeItem('user');
     setUser(null);
   };
 

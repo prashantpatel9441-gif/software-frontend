@@ -74,7 +74,7 @@ export const Categories = () => {
   // Search Filter
   const filteredCategories = categories.filter(c => {
     const term = searchTerm.toLowerCase();
-    return c.name.toLowerCase().includes(term);
+    return (c.name || '').toLowerCase().includes(term);
   });
 
   // Pagination Logic
@@ -133,6 +133,7 @@ export const Categories = () => {
       setIsModalOpen(false);
     } catch (error) {
       console.error('Error saving category:', error);
+      alert(error.message || 'Error saving category');
     }
   };
 
@@ -145,6 +146,7 @@ export const Categories = () => {
       fetchCategories();
     } catch (error) {
       console.error('Error deleting category:', error);
+      alert(error.message || 'Error deleting category');
     }
   };
 
